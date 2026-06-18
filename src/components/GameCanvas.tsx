@@ -1360,42 +1360,42 @@ export default function GameCanvas({
           sh = imgH / 3;
           switch (bucket) {
             case 0: // 右
-              col = 2; row = 0; // 「右」セル - row:0, col:2
+              col = 2; row = 0; // 「右」最上段右
               flashlightOffsetX = 10;
               flashlightOffsetY = 4;
               break;
             case 1: // 右下
-              col = 1; row = 0; // 「右前」セル - row:0, col:1
+              col = 2; row = 1; // 「右前」中央段右
               flashlightOffsetX = 8;
               flashlightOffsetY = 8;
               break;
             case 2: // 下 (正面)
-              col = 1; row = 2; // 「前」正面セル - row:2, col:1
+              col = 0; row = 0; // 「前」最上段左
               flashlightOffsetX = 4;
               flashlightOffsetY = 10;
               break;
             case 3: // 左下
-              col = 0; row = 2; // 「左前」セル - row:2, col:0
+              col = 1; row = 1; // 「左前」中央段中央
               flashlightOffsetX = -8;
               flashlightOffsetY = 8;
               break;
             case 4: // 左
-              col = 0; row = 1; // 「左」セル - row:1, col:0
+              col = 0; row = 1; // 「左」中央段左
               flashlightOffsetX = -10;
               flashlightOffsetY = 4;
               break;
             case 5: // 左上
-              col = 1; row = 1; // 「左後」セル - row:1, col:1
+              col = 1; row = 2; // 「左後」最下段中央
               flashlightOffsetX = -8;
               flashlightOffsetY = -8;
               break;
             case 6: // 上 (背面)
-              col = 0; row = 0; // 「後」背面セル - row:0, col:0
+              col = 1; row = 0; // 「後」最上段中央
               flashlightOffsetX = -4;
               flashlightOffsetY = -10;
               break;
             case 7: // 右上
-              col = 2; row = 1; // 「右後」セル - row:1, col:2
+              col = 0; row = 2; // 「右後」最下段左
               flashlightOffsetX = 8;
               flashlightOffsetY = -8;
               break;

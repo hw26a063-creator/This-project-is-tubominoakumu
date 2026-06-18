@@ -84,7 +84,7 @@ export default function Menu({ onStart }: MenuProps) {
 
       {/* ヘッダーマスタ音量 */}
       <div className="w-full max-w-4xl flex justify-between items-center z-10" id="menu_header">
-        <span className="font-mono text-xs text-stone-500 mt-2">v1.1.0 // tsubomi_no_akumu</span>
+        <span className="font-mono text-xs text-stone-500 mt-2">v1.1.0 // tsubomi_no_me</span>
         <button 
           id="mute_button"
           onClick={toggleMute}
@@ -103,7 +103,7 @@ export default function Menu({ onStart }: MenuProps) {
           <img 
             id="key_visual_img"
             src={keyVisualPath} 
-            alt="つぼみのあくむ"
+            alt="つぼみのめ"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover brightness-[0.8] contrast-[1.1]"
             onError={(e) => {
@@ -114,7 +114,7 @@ export default function Menu({ onStart }: MenuProps) {
                 parent.className = "w-72 h-72 md:w-80 md:h-80 bg-gradient-to-tr from-red-950 via-stone-950 to-stone-900 rounded-2xl border-4 border-stone-800 shadow-[0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center relative";
                 const text = document.createElement('div');
                 text.className = "text-center p-4 font-mono select-none text-red-500/60";
-                text.innerHTML = "<div class='text-4xl mb-4 font-semibold'>つぼみ</div><div class='text-[10px]'>あくむのなかへ</div>";
+                text.innerHTML = "<div class='text-4xl mb-4 font-semibold'>つぼみのめ</div><div class='text-[10px]'>あくむのなかへ</div>";
                 parent.appendChild(text);
               }
             }}
@@ -128,7 +128,7 @@ export default function Menu({ onStart }: MenuProps) {
           <div className="space-y-1 mb-8" id="title_banner">
             <p className="text-red-500 font-mono tracking-[0.5em] text-sm font-semibold pl-1">精神病棟ステルスホラー</p>
             <h1 className="text-5xl md:text-6xl font-bold tracking-wider text-rose-100 font-sans [text-shadow:0_4px_12px_rgba(251,113,133,0.3)] animate-pulse">
-              つぼみのあくむ
+              つぼみのめ
             </h1>
             <p className="text-xs text-stone-500 italic mt-2">"おとはしないで、あそこにだれかいるの"</p>
           </div>
@@ -173,7 +173,7 @@ export default function Menu({ onStart }: MenuProps) {
             >
               <div className="flex items-center gap-3">
                 <HelpCircle size={18} className={selectedIndex === 1 ? 'text-rose-400' : 'text-stone-500'} />
-                <span className="font-semibold select-none pr-2">るーる説明</span>
+                <span className="font-semibold select-none pr-2">るーる</span>
               </div>
               {selectedIndex === 1 && (
                 <div className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-ping" />
@@ -189,7 +189,7 @@ export default function Menu({ onStart }: MenuProps) {
 
       {/* フッター */}
       <div className="w-full text-center text-xs text-stone-600 z-10 select-none pb-2" id="menu_footer">
-        © 2026 つぼみのあくむ開発室. イヤホンでのプレイを強く推奨します。
+        © 2026 つぼみのめ開発室. イヤホンでのプレイを強く推奨します。
       </div>
 
       {/* るーるダイアログポータル */}

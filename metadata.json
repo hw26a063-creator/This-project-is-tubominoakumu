@@ -1,5 +1,5 @@
 {
-  "name": "つぼみのあくむ",
+  "name": "つぼみのめ",
   "description": "2D見下ろし型ステルスホラーゲーム。つぼみちゃんを操作し、暗闇のなか懐中電灯を頼りに、音を立てずに不気味な精神病院から脱出しましょう。",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

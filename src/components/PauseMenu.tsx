@@ -127,10 +127,9 @@ export default function PauseMenu({
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
             <h2 className="text-xl font-bold tracking-wider text-rose-300">
-              {activeTab === 'MAIN' ? 'あくむの中断' : 'かばん（インベントリ）'}
+              {activeTab === 'MAIN' ? 'めにゅー' : 'かばん（インベントリ）'}
             </h2>
           </div>
-          <span className="text-xs font-mono text-stone-500 border border-stone-800 bg-stone-950 px-2 py-0.5 rounded-md">TIME LOCKED</span>
         </div>
 
         {/* SAN値ゲージを一時停止時にも親切に表示 */}

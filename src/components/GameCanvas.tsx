@@ -943,8 +943,12 @@ export default function GameCanvas({
 
     if (p.isHiding) {
       // 外に出る
-      audioManager.playHideTransition();
       const spot = map.hideSpots.find(h => h.id === p.hidingInId);
+      if (spot && spot.type === 'BED') {
+        audioManager.playBedTransition();
+      } else {
+        audioManager.playHideTransition();
+      }
       let outX = p.x;
       let outY = p.y;
       if (spot) {
@@ -975,7 +979,11 @@ export default function GameCanvas({
       });
 
       if (spot) {
-        audioManager.playHideTransition();
+        if (spot.type === 'BED') {
+          audioManager.playBedTransition();
+        } else {
+          audioManager.playHideTransition();
+        }
         // モンスターが近くにいる状態で隠れた場合、少し離れた位置をモンスターの追跡目標にする（追跡遮断）
         nextPlayerState = {
           ...p,

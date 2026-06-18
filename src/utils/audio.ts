@@ -199,6 +199,57 @@ class AudioManager {
     osc.stop(this.ctx.currentTime + 0.23);
   }
 
+  // ベッドに入ったり出たりするガサゴソ（擦れ）音
+  public playBedTransition() {
+    this.resume();
+    if (!this.ctx || this.isMuted) return;
+
+    try {
+      const duration = 0.4;
+      const bufferSize = this.ctx.sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      
+      // ホワイトノイズの生成
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      // 布の摩擦音。300Hz-800Hzの中低域メインのバンドパスフィルターにする
+      filter.frequency.setValueAtTime(400, this.ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(280, this.ctx.currentTime + duration);
+      filter.Q.setValueAtTime(2.5, this.ctx.currentTime);
+
+      const gain = this.ctx.createGain();
+      
+      // ガサ、ゴソ、と2回こすれる山を演出する
+      const now = this.ctx.currentTime;
+      gain.gain.setValueAtTime(0, now);
+      
+      // 1山目（ガサッ）
+      gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+      gain.gain.linearRampToValueAtTime(0.05, now + 0.15);
+      
+      // 2山目（ゴソッ）
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.22);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+
+      source.start(now);
+      source.stop(now + duration);
+    } catch (e) {
+      console.warn('Failed to play bed transition audio:', e);
+    }
+  }
+
   // 心拍音ループ開始（距離やパニック度によってテンポ自動調整）
   public startHeartbeat() {
     this.resume();

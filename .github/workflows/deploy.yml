@@ -4,9 +4,10 @@ on:
   push:
     branches:
       - main
+      - master # 念のためどちらのブランチ名でも動くように設定
 
 permissions:
-  contents: write
+  contents: write # gh-pagesブランチへのデプロイ権限
 
 jobs:
   build-and-deploy:
@@ -18,6 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
+          node-cache: 'npm'
           node-version: 18
 
       - name: Install dependencies
@@ -29,6 +31,6 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist
-          branch: gh-pages
+          folder: dist # ビルドされたフォルダ
+          branch: gh-pages # 公開用のブランチ
           clean: true

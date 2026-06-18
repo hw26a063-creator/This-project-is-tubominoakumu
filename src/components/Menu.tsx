@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Volume2, VolumeX, HelpCircle, Play } from 'lucide-react';
 import { audioManager } from '../utils/audio';
+import keyVisual from '../assets/images/tsubomi_nightmare_keyvisual_1781678853210.jpg';
 
 interface MenuProps {
   onStart: () => void;
@@ -17,7 +18,7 @@ export default function Menu({ onStart }: MenuProps) {
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
   // キービジュアルの画像パス。画像生成で作成されたものを利用
-  const keyVisualPath = '/src/assets/images/tsubomi_nightmare_keyvisual_1781678853210.jpg';
+  const keyVisualPath = keyVisual;
 
   useEffect(() => {
     // 最初のインタラクションでオーディオをアンロックする。

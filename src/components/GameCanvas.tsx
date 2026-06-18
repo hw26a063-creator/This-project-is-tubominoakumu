@@ -229,12 +229,17 @@ export default function GameCanvas({
   };
 
   useEffect(() => {
+    const getAssetPath = (filename: string) => {
+      const base = import.meta.env.BASE_URL || './';
+      return base.endsWith('/') ? `${base}${filename}` : `${base}/${filename}`;
+    };
+
     const img2 = new Image();
     img2.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
     
     // イベントハンドラーを先に設定してロード競合やキャッシュでの失敗を回避
     img2.onload = () => {
-      console.log("Successfully loaded /tubomi2.png. Stripping white background...");
+      console.log("Successfully loaded " + getAssetPath('tubomi2.png') + ". Stripping white background...");
       const processed = removeWhiteBackground(img2);
       tubomiImageRef.current = processed;
       setTubomiLoaded(true);
@@ -245,7 +250,7 @@ export default function GameCanvas({
       const img1 = new Image();
       img1.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
       img1.onload = () => {
-        console.log("Successfully loaded /tubomi1.png as fallback. Stripping white background...");
+        console.log("Successfully loaded " + getAssetPath('tubomi1.png') + " as fallback. Stripping white background...");
         const processed = removeWhiteBackground(img1);
         tubomiImageRef.current = processed;
         setTubomiLoaded(true);
@@ -253,11 +258,11 @@ export default function GameCanvas({
       img1.onerror = (e) => {
         console.warn("Failed to load both /tubomi2.png and /tubomi1.png. Falling back to vector graphics.", e);
       };
-      img1.src = '/tubomi1.png';
+      img1.src = getAssetPath('tubomi1.png');
     };
 
     // ロード開始
-    img2.src = '/tubomi2.png';
+    img2.src = getAssetPath('tubomi2.png');
   }, []);
   
   // モンスターの状態

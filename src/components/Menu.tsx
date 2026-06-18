@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Volume2, VolumeX, HelpCircle, Play } from 'lucide-react';
 import { audioManager } from '../utils/audio';
+import keyVisual from '../assets/images/keyvisual.jpg';
 
 interface MenuProps {
   onStart: () => void;
@@ -16,13 +17,8 @@ export default function Menu({ onStart }: MenuProps) {
   const [showRule, setShowRule] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  const getAssetPath = (filename: string) => {
-    const base = import.meta.env.BASE_URL || './';
-    return base.endsWith('/') ? `${base}${filename}` : `${base}/${filename}`;
-  };
-
-  // キービジュアルの画像パス。画像生成で作成されたものをpublicフォルダに配置し利用
-  const keyVisualPath = getAssetPath('keyvisual.jpg');
+  // キービジュアルの画像パス。Viteのアセットインポートを通して解決
+  const keyVisualPath = keyVisual;
 
   useEffect(() => {
     // 最初のインタラクションでオーディオをアンロックする。

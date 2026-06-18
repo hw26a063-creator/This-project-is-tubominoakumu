@@ -6,7 +6,6 @@
 import React, { useEffect, useState } from 'react';
 import { Volume2, VolumeX, HelpCircle, Play } from 'lucide-react';
 import { audioManager } from '../utils/audio';
-import keyVisual from '../assets/images/tsubomi_nightmare_keyvisual_1781678853210.jpg';
 
 interface MenuProps {
   onStart: () => void;
@@ -17,8 +16,13 @@ export default function Menu({ onStart }: MenuProps) {
   const [showRule, setShowRule] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
-  // キービジュアルの画像パス。画像生成で作成されたものを利用
-  const keyVisualPath = keyVisual;
+  const getAssetPath = (filename: string) => {
+    const base = import.meta.env.BASE_URL || './';
+    return base.endsWith('/') ? `${base}${filename}` : `${base}/${filename}`;
+  };
+
+  // キービジュアルの画像パス。画像生成で作成されたものをpublicフォルダに配置し利用
+  const keyVisualPath = getAssetPath('keyvisual.jpg');
 
   useEffect(() => {
     // 最初のインタラクションでオーディオをアンロックする。
@@ -105,7 +109,6 @@ export default function Menu({ onStart }: MenuProps) {
             id="key_visual_img"
             src={keyVisualPath} 
             alt="つぼみのめ"
-            referrerPolicy="no-referrer"
             className="w-full h-full object-cover brightness-[0.8] contrast-[1.1]"
             onError={(e) => {
               // 画像がない場合のフォールバック（不気味な赤と黒のグラデーションに少女の影）

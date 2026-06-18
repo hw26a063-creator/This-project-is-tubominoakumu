@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Play, RotateCcw, Volume2, VolumeX, Eye, EyeOff, Radio, Smartphone, HelpCircle } from 'lucide-react';
 import { GameMap, Player, Monster, Item, HideSpot, Obstacle, GameState } from '../types';
 import { audioManager } from '../utils/audio';
+import tubomiImage from '../assets/images/tubomi2.png';
 
 interface GameCanvasProps {
   isPaused: boolean;
@@ -229,40 +230,23 @@ export default function GameCanvas({
   };
 
   useEffect(() => {
-    const getAssetPath = (filename: string) => {
-      const base = import.meta.env.BASE_URL || './';
-      return base.endsWith('/') ? `${base}${filename}` : `${base}/${filename}`;
-    };
-
     const img2 = new Image();
     img2.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
     
     // イベントハンドラーを先に設定してロード競合やキャッシュでの失敗を回避
     img2.onload = () => {
-      console.log("Successfully loaded " + getAssetPath('tubomi2.png') + ". Stripping white background...");
+      console.log("Successfully loaded tubomi2.png through import. Stripping white background...");
       const processed = removeWhiteBackground(img2);
       tubomiImageRef.current = processed;
       setTubomiLoaded(true);
     };
     
-    img2.onerror = () => {
-      console.log("Failed to load /tubomi2.png, trying fallback to /tubomi1.png");
-      const img1 = new Image();
-      img1.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
-      img1.onload = () => {
-        console.log("Successfully loaded " + getAssetPath('tubomi1.png') + " as fallback. Stripping white background...");
-        const processed = removeWhiteBackground(img1);
-        tubomiImageRef.current = processed;
-        setTubomiLoaded(true);
-      };
-      img1.onerror = (e) => {
-        console.warn("Failed to load both /tubomi2.png and /tubomi1.png. Falling back to vector graphics.", e);
-      };
-      img1.src = getAssetPath('tubomi1.png');
+    img2.onerror = (e) => {
+      console.warn("Failed to load imported tubomi2.png. Falling back to vector graphics.", e);
     };
 
     // ロード開始
-    img2.src = getAssetPath('tubomi2.png');
+    img2.src = tubomiImage;
   }, []);
   
   // モンスターの状態

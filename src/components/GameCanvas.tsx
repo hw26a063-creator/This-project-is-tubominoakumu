@@ -31,6 +31,235 @@ export default function GameCanvas({
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
+  // つぼみちゃんのスプライト画像をロード（tubomi2.pngを最優先、なければtubomi1.pngにフォールバック、白背景は自動的に透過カット処理）
+  const tubomiImageRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
+  const [tubomiLoaded, setTubomiLoaded] = useState<boolean>(false);
+
+  // 外周から連結している白背景をBFS（幅優先探索）で検出し、さらに境界部分にアンチエイリアスのエッジスムージング（半透明フェザー処理）を適用して、白いチラつきを完全に除去するプロフェッショナル背景透過システム
+  const removeWhiteBackground = (img: HTMLImageElement): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+
+    ctx.drawImage(img, 0, 0);
+
+    try {
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // 3x3分割のセルの大きさを予測
+      const cellW = w / 3;
+      const cellH = h / 3;
+      const clearTopHeight = 82; // 確実にキャラクターの頭（リボン）を傷つけず、文字を完全に除去する高さ
+
+      // 前処理：各セルの上部 82px にある方向指示文字（「前」「後」など）を完全に透明化する
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          for (let cy = 0; cy < clearTopHeight; cy++) {
+            for (let cx = 0; cx < cellW; cx++) {
+              const px = Math.floor(c * cellW + cx);
+              const py = Math.floor(r * cellH + cy);
+              if (px < w && py < h) {
+                const idx = (py * w + px) * 4;
+                // 純粋な透明白に事前に塗りつぶすことで、描画されるのを100%防ぎ、白背景BFSの伝播を助けます
+                data[idx] = 255;
+                data[idx + 1] = 255;
+                data[idx + 2] = 255;
+                data[idx + 3] = 0;
+              }
+            }
+          }
+        }
+      }
+
+      // 訪問済みフラグ (0: 未訪問, 1: 訪問済み/背景部分として確定)
+      const visited = new Uint8Array(w * h);
+      const queue: number[] = [];
+
+      // 許容閾値を広めに設定（明るさが180以上の「白に近いアンチエイリアスの濁り」まで外周から繋がっていれば透過背景とする）
+      const threshold = 75; // 255 - 75 = 180
+      const isWhiteLike = (idx: number): boolean => {
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+        if (a < 10) return false; // すでにほぼ透明なピクセルはスキップ
+
+        return r >= 180 && g >= 180 && b >= 180;
+      };
+
+      // 外周ピクセル（最上列、最下列、最左列、最右列）から探索を開始
+      for (let x = 0; x < w; x++) {
+        // 最上列
+        let idxTop = x * 4;
+        if (isWhiteLike(idxTop)) {
+          queue.push(x);
+          visited[x] = 1;
+        }
+        // 最下列
+        const botOfs = (h - 1) * w + x;
+        let idxBot = botOfs * 4;
+        if (isWhiteLike(idxBot)) {
+          queue.push(botOfs);
+          visited[botOfs] = 1;
+        }
+      }
+
+      for (let y = 1; y < h - 1; y++) {
+        // 最左列
+        const leftOfs = y * w;
+        let idxLeft = leftOfs * 4;
+        if (isWhiteLike(idxLeft)) {
+          queue.push(leftOfs);
+          visited[leftOfs] = 1;
+        }
+        // 最右列
+        const rightOfs = y * w + w - 1;
+        let idxRight = rightOfs * 4;
+        if (isWhiteLike(idxRight)) {
+          queue.push(rightOfs);
+          visited[rightOfs] = 1;
+        }
+      }
+
+      // BFS探索による洪水流 (Flood Fill) 実装 - 連結した白背景を全て特定
+      let head = 0;
+      while (head < queue.length) {
+        const curr = queue[head++];
+        const cx = curr % w;
+        const cy = Math.floor(curr / w);
+
+        // 対象ピクセルを完全に透明化
+        const pixelIdx = curr * 4;
+        data[pixelIdx + 3] = 0;
+
+        // 4近傍を走査
+        const neighbors = [
+          [cx - 1, cy],
+          [cx + 1, cy],
+          [cx, cy - 1],
+          [cx, cy + 1]
+        ];
+
+        for (let i = 0; i < neighbors.length; i++) {
+          const nx = neighbors[i][0];
+          const ny = neighbors[i][1];
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            const nofs = ny * w + nx;
+            if (visited[nofs] === 0) {
+              const nidx = nofs * 4;
+              if (isWhiteLike(nidx)) {
+                queue.push(nofs);
+                visited[nofs] = 1;
+              }
+            }
+          }
+        }
+      }
+
+      // 【超高画質化・エッジスムージング処理】
+      // 背景透過（visited === 1）に隣接するキャラクターの「フチ（輪郭線）」付近のピクセルをなめらかにフェザー処理します。
+      // これにより、縮小描画されたときの白いチラつき（アンチエイリアスのゴミ残り）を100%消失させます。
+      const edgeRadius = 2; // 周囲2ピクセルまでチェックしてフェザー化
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const ofs = y * w + x;
+          if (visited[ofs] === 1) continue; // すでに完全に背景として透明化した部分はスキップ
+
+          const idx = ofs * 4;
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const a = data[idx + 3];
+          if (a === 0) continue;
+
+          // このピクセルが透明化された背景領域に近接しているか調査
+          let isNearTransparent = false;
+          for (let dy = -edgeRadius; dy <= edgeRadius; dy++) {
+            for (let dx = -edgeRadius; dx <= edgeRadius; dx++) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                if (visited[ny * w + nx] === 1) {
+                  isNearTransparent = true;
+                  break;
+                }
+              }
+            }
+            if (isNearTransparent) break;
+          }
+
+          if (isNearTransparent) {
+            // 境界付近で白に近い明るい色（RGB値が高めのアンチエイリアス部分）を滑らかにブレンド
+            const avg = (r + g + b) / 3;
+            if (avg > 130) {
+              // avgが130〜255の間で滑らかにアルファ（不透明度）を落とし、グラデーション透過させます。
+              const ratio = Math.max(0, Math.min(1, (255 - avg) / (255 - 130)));
+              data[idx + 3] = Math.floor(a * ratio * 0.82); // 境界のなじみをさらに良くするため、少しだけアルファを絞る
+            }
+          }
+        }
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+      console.log(`BFS clear bg count: ${queue.length} pixels transparentized with high-quality edge smoothing.`);
+    } catch (e) {
+      console.warn("BFS Background removal failed, falling back to safe simple filter:", e);
+      // 万が一 CORS 設定等でブラウザ制限が発生した場合のフォールバック・シンプルなピクセル透過フィルタ
+      try {
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          if (avg > 200) {
+            data[i + 3] = 0;
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+      } catch (e2) {
+        console.error("Fallback simple filter failed:", e2);
+      }
+    }
+
+    return canvas;
+  };
+
+  useEffect(() => {
+    const img2 = new Image();
+    img2.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
+    
+    // イベントハンドラーを先に設定してロード競合やキャッシュでの失敗を回避
+    img2.onload = () => {
+      console.log("Successfully loaded /tubomi2.png. Stripping white background...");
+      const processed = removeWhiteBackground(img2);
+      tubomiImageRef.current = processed;
+      setTubomiLoaded(true);
+    };
+    
+    img2.onerror = () => {
+      console.log("Failed to load /tubomi2.png, trying fallback to /tubomi1.png");
+      const img1 = new Image();
+      img1.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
+      img1.onload = () => {
+        console.log("Successfully loaded /tubomi1.png as fallback. Stripping white background...");
+        const processed = removeWhiteBackground(img1);
+        tubomiImageRef.current = processed;
+        setTubomiLoaded(true);
+      };
+      img1.onerror = (e) => {
+        console.warn("Failed to load both /tubomi2.png and /tubomi1.png. Falling back to vector graphics.", e);
+      };
+      img1.src = '/tubomi1.png';
+    };
+
+    // ロード開始
+    img2.src = '/tubomi2.png';
+  }, []);
+  
   // モンスターの状態
   const [monsters, setMonsters] = useState<Monster[]>([]);
   
@@ -946,17 +1175,16 @@ export default function GameCanvas({
         ctx.beginPath();
         ctx.arc(item.x, item.y, 10, 0, Math.PI * 2);
         ctx.fill();
-        // カギの星印
+        // カギ of 星印
         ctx.fillStyle = '#fff';
         ctx.font = '10px sans-serif';
         ctx.fillText("🗝️", item.x - 5, item.y + 4);
       }
     });
 
-    // 6. モンスターの描画（自分たちの視野がある暗闇レイヤーより前に描かないと見えなくなるため、まず足元のエフェクトなど）
+    // 6. モンスターの描画
     monsters.forEach(m => {
       const dist = Math.hypot(m.x - playerState.x, m.y - playerState.y);
-      // 暗闇の中にいる時のみ描画を薄くするか、懐中電灯に照らされているときだけ鮮明に見えるようにする。
       let isVisible = false;
 
       if (dist < 45) {
@@ -976,31 +1204,26 @@ export default function GameCanvas({
       ctx.rotate(m.angle);
 
       if (isVisible) {
-        // 赤く光る目、禍々しい2D這いずり生物
         ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; // 黒いスライムの影
         ctx.beginPath();
         ctx.arc(0, 0, 15, 0, Math.PI * 2);
         ctx.fill();
 
         if (m.type === 'HEARING') {
-          // 盲目の耳トゲタイプ
-          ctx.strokeStyle = '#e11d48'; // 激怒する深紅
+          ctx.strokeStyle = '#e11d48'; // 深紅
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(-10, -10); ctx.lineTo(15, 0); ctx.lineTo(-10, 10);
           ctx.stroke();
-          // 耳
           ctx.fillStyle = '#be123c';
           ctx.fillRect(-15, -12, 6, 24);
         } else {
-          // 幽霊浮遊
-          ctx.strokeStyle = '#a21caf'; // サイケデリックなマゼンタ紫
+          ctx.strokeStyle = '#a21caf'; // マゼンタ
           ctx.lineWidth = 1.5;
           ctx.beginPath();
           ctx.moveTo(-15, -15); ctx.lineTo(12, -5); ctx.lineTo(12, 5); ctx.lineTo(-15, 15);
           ctx.closePath();
           ctx.stroke();
-          // ゴーストアイ
           ctx.fillStyle = '#fb00ff';
           ctx.beginPath();
           ctx.arc(5, -4, 2, 0, Math.PI * 2);
@@ -1008,7 +1231,6 @@ export default function GameCanvas({
           ctx.fill();
         }
 
-        // 状態表示 (CHASEのときは頭上に赤いアラート「！」)
         if (m.state === 'CHASE') {
           ctx.restore();
           ctx.save();
@@ -1018,7 +1240,6 @@ export default function GameCanvas({
           ctx.fillText("❗", -4, -20);
         }
       } else {
-        // 暗闇でもわずかに這いずりエフェクト（足音が響いているときの不気味な波紋）
         if (m.state === 'CHASE') {
           ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
           ctx.lineWidth = 1;
@@ -1026,10 +1247,6 @@ export default function GameCanvas({
           ctx.arc(0, 0, 12 + Math.sin(performance.now() / 50) * 8, 0, Math.PI * 2);
           ctx.stroke();
         } else if (m.type === 'HEARING' && Math.random() < 0.05) {
-          // 盲目タイプが歩く時のカツカツという赤い音響波紋（目視できない暗闇から音が漏れている可視化）
-          ctx.restore();
-          ctx.save();
-          ctx.translate(m.x, m.y);
           ctx.strokeStyle = 'rgba(244, 63, 94, 0.15)';
           ctx.lineWidth = 1.5;
           ctx.beginPath();
@@ -1040,15 +1257,12 @@ export default function GameCanvas({
       ctx.restore();
     });
 
-    // 7. プレイヤー（つぼみちゃん）の描画（可愛らしいアニメーション・高解像度デフォルメアニメ）
+    // 7. プレイヤー（つぼみちゃん）の描画
     if (!playerState.isHiding) {
       ctx.save();
       ctx.translate(playerState.x, playerState.y);
-      ctx.rotate(playerState.angle);
 
       const now = performance.now();
-      
-      // 移動中（W,A,S,D、矢印キー、またはスマホジョイスティックがアクティブな場合）の判定
       const isMoving = 
         keysPressed.current['w'] || keysPressed.current['a'] || keysPressed.current['s'] || keysPressed.current['d'] ||
         keysPressed.current['arrowup'] || keysPressed.current['arrowdown'] || keysPressed.current['arrowleft'] || keysPressed.current['arrowright'] ||
@@ -1056,7 +1270,18 @@ export default function GameCanvas({
 
       const isDashing = playerState.isDashing;
 
-      // 各種アニメーション周期とパラメータの算出
+      let dir: 'DOWN' | 'UP' | 'RIGHT' | 'LEFT' = 'DOWN';
+      const angle = playerState.angle;
+      if (angle >= -Math.PI / 4 && angle < Math.PI / 4) {
+        dir = 'RIGHT';
+      } else if (angle >= Math.PI / 4 && angle < 3 * Math.PI / 4) {
+        dir = 'DOWN';
+      } else if (angle >= -3 * Math.PI / 4 && angle < -Math.PI / 4) {
+        dir = 'UP';
+      } else {
+        dir = 'LEFT';
+      }
+
       const bounce = isMoving
         ? (isDashing ? Math.sin(now * 0.024) * 1.6 : Math.sin(now * 0.015) * 1.0)
         : Math.sin(now * 0.0035) * 0.45;
@@ -1065,13 +1290,12 @@ export default function GameCanvas({
         ? (isDashing ? Math.sin(now * 0.024) * 4.5 : Math.sin(now * 0.015) * 3.2)
         : 0;
 
-      const ribbonAnim = Math.sin(now * 0.006) * 1.2;
-      const hairAnim = Math.sin(now * 0.004) * 0.6;
+      const ribbonAnim = isMoving ? Math.sin(now * 0.006) * 1.2 : 0;
       
       const headX = 0;
       const headY = bounce * 0.7;
+      const bodyY = bounce;
 
-      // 共通の描画ヘルパー：太い上品なふち取りつきの図形を描写
       const drawPart = (
         drawFn: () => void,
         fillColor: string,
@@ -1091,175 +1315,628 @@ export default function GameCanvas({
         ctx.restore();
       };
 
-      // --- 1. 後ろ側の足（奥のブーツ） ---
-      // 少し暗い茶色
-      drawPart(() => {
-        const lx = -4 - (isMoving ? 1 : 0);
-        const ly = -4.5 - legStep;
-        ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-      }, '#451a03');
+      const useSprite = tubomiImageRef.current !== null;
 
-      // --- 2. 前側の足（手前のブーツ） ---
-      // 明るい茶色
-      drawPart(() => {
-        const rx = -3 - (isMoving ? 1 : 0);
-        const ry = 4.5 + legStep;
-        ctx.arc(rx, ry, 3.2, 0, Math.PI * 2);
-      }, '#78350f');
+      if (useSprite) {
+        const img = tubomiImageRef.current!;
+        const imgW = img.width;
+        const imgH = img.height;
 
-      // --- 3. 髪の後ろの大きな赤いリボン（つぼみちゃんのトレードマーク） ---
-      // 後頭部の髪の後ろになびく、可愛くて大きなおめかしリボン
-      const ribX = headX - 5.5;
-      const ribY = headY;
-      // 上側のリボン（ひらひら）
-      drawPart(() => {
-        ctx.moveTo(ribX, ribY);
-        ctx.quadraticCurveTo(ribX - 6, ribY - 8 + ribbonAnim, ribX - 8, ribY - 5 + ribbonAnim);
-        ctx.quadraticCurveTo(ribX - 4, ribY - 2, ribX, ribY);
-      }, '#ef4444');
-      // 下側のリボン（ひらひら）
-      drawPart(() => {
-        ctx.moveTo(ribX, ribY);
-        ctx.quadraticCurveTo(ribX - 6, ribY + 8 - ribbonAnim, ribX - 8, ribY + 5 - ribbonAnim);
-        ctx.quadraticCurveTo(ribX - 4, ribY + 2, ribX, ribY);
-      }, '#ef4444');
-      // 結び目
-      drawPart(() => {
-        ctx.arc(ribX, ribY, 2.2, 0, Math.PI * 2);
-      }, '#be123c');
+        let spriteMode: '3x3' | '3x4' | '1x1' = '3x3';
+        const ratio = imgW / imgH;
 
-      // --- 4. 体・ピンクのコート（お洋服） ---
-      const bodyX = -2;
-      const bodyY = bounce;
-      const bodyH = 10;
-      drawPart(() => {
-        // 丸みのあるコート
-        ctx.arc(bodyX, bodyY, bodyH / 2, 0, Math.PI * 2);
-      }, '#fda4af');
+        if (imgW > 0 && imgH > 0) {
+          if (Math.abs(ratio - 0.75) < 0.15) {
+            spriteMode = '3x4'; // 4方向歩行グラフィック (3列4行、比率0.75)
+          } else if (ratio > 1.3 || ratio < 0.7) {
+            spriteMode = '1x1'; // 単一の立ち絵・イラスト
+          } else {
+            spriteMode = '3x3'; // 8方向スプライト (3列3行、比率1.0)
+          }
+        }
 
-      // 白い可愛いマフラー・ふわふわ襟
-      drawPart(() => {
-        ctx.arc(bodyX + 2, bodyY, 3.5, 0, Math.PI * 2);
-      }, '#ffe4e6');
+        // キャラクターの現在の角度 (0 - 2PI)
+        let normAngle = playerState.angle;
+        while (normAngle < 0) normAngle += Math.PI * 2;
+        while (normAngle >= Math.PI * 2) normAngle -= Math.PI * 2;
 
-      // --- 5. 頭部（茶色のショートヘア ＆ 顔・肌色） ---
-      // 髪の後頭部ベース（可愛いマロンブラウンの丸）
-      drawPart(() => {
-        ctx.arc(headX - 1.5, headY, 8.5, 0, Math.PI * 2);
-      }, '#8f5c38');
-
-      // お顔の肌色部分（ふっくらした可愛いほっぺ）
-      drawPart(() => {
-        ctx.arc(headX + 2.5, headY, 6.5, -Math.PI / 2, Math.PI / 2);
-        ctx.lineTo(headX, headY + 6.5);
-        ctx.lineTo(headX, headY - 6.5);
-        ctx.closePath();
-      }, '#ffe5d9');
-
-      // 前髪（おでこを覆うお茶目なハネ）
-      // 上のハネ
-      drawPart(() => {
-        ctx.moveTo(headX + 1, headY - 6.5);
-        ctx.quadraticCurveTo(headX + 4, headY - 4, headX + 1.5, headY - 2);
-        ctx.quadraticCurveTo(headX, headY - 4, headX + 1, headY - 6.5);
-      }, '#8f5c38');
-      // 真ん中のハネ（ハイライトのように少し明るいキャラメルブラウンに）
-      drawPart(() => {
-        ctx.moveTo(headX + 3, headY - 2);
-        ctx.quadraticCurveTo(headX + 5, headY, headX + 2.5, headY + 2);
-        ctx.quadraticCurveTo(headX, headY, headX + 3, headY - 2);
-      }, '#c19a6b');
-      // 下側のハネ
-      drawPart(() => {
-        ctx.moveTo(headX + 1, headY + 6.5);
-        ctx.quadraticCurveTo(headX + 4, headY + 4, headX + 1.5, headY + 2);
-        ctx.quadraticCurveTo(headX, headY + 4, headX + 1, headY + 6.5);
-      }, '#8f5c38');
-
-      // 髪のアウトライン・ハネハネ（後ろ髪のハネ・少し濃いめのビターブラウン）
-      drawPart(() => {
-        ctx.moveTo(headX - 6, headY - 5 + hairAnim);
-        ctx.lineTo(headX - 9, headY - 7 + hairAnim);
-        ctx.lineTo(headX - 7, headY - 3 + hairAnim);
-        ctx.closePath();
-      }, '#5f3f2d');
-      drawPart(() => {
-        ctx.moveTo(headX - 6, headY + 5 - hairAnim);
-        ctx.lineTo(headX - 9, headY + 7 - hairAnim);
-        ctx.lineTo(headX - 7, headY + 3 - hairAnim);
-        ctx.closePath();
-      }, '#5f3f2d');
-
-      // --- 6. うるうるの愛らしい大きな目（タレ目アニメ調） ---
-      // 右向きのため、プレイヤーの右顔面（y = -2 と y = 2 付近）に可愛い目を配置
-      const drawEye = (ey: number) => {
-        // 白目のベース
-        drawPart(() => {
-          ctx.arc(headX + 4, headY + ey, 2.2, 0, Math.PI * 2);
-        }, '#ffffff');
+        const step = Math.PI / 4;
+        const halfStep = step / 2;
         
-        // 黒目・紺色（うるおった大きなタレ目、少し下寄り）
-        drawPart(() => {
-          ctx.arc(headX + 4.5, headY + ey + 0.3, 1.3, 0, Math.PI * 2);
-        }, '#1e293b');
+        let shiftedAngle = normAngle + halfStep;
+        if (shiftedAngle >= Math.PI * 2) shiftedAngle -= Math.PI * 2;
+        const bucket = Math.floor(shiftedAngle / step);
 
-        // きらめきハイライト（小さな白いドット）
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(headX + 5.2, headY + ey - 0.4, 0.6, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.restore();
+        let col = 0;
+        let row = 0;
+        let sw = imgW;
+        let sh = imgH;
+        let flashlightOffsetX = 0;
+        let flashlightOffsetY = 0;
+        let needFlipX = false; // 3x3 の一部セルで左右反転を用いて空白セルを補うフラグ
 
-        // 照れ・怯えのチーク（赤いぽわっとした丸、目の下側）
+        if (spriteMode === '3x3') {
+          sw = imgW / 3;
+          sh = imgH / 3;
+          switch (bucket) {
+            case 0: // 右
+              col = 2; row = 0; // 「右」セル - row:0, col:2
+              flashlightOffsetX = 10;
+              flashlightOffsetY = 4;
+              break;
+            case 1: // 右下
+              col = 1; row = 0; // 「右前」セル - row:0, col:1
+              flashlightOffsetX = 8;
+              flashlightOffsetY = 8;
+              break;
+            case 2: // 下 (正面)
+              col = 1; row = 2; // 「前」正面セル - row:2, col:1
+              flashlightOffsetX = 4;
+              flashlightOffsetY = 10;
+              break;
+            case 3: // 左下
+              col = 0; row = 2; // 「左前」セル - row:2, col:0
+              flashlightOffsetX = -8;
+              flashlightOffsetY = 8;
+              break;
+            case 4: // 左
+              col = 0; row = 1; // 「左」セル - row:1, col:0
+              flashlightOffsetX = -10;
+              flashlightOffsetY = 4;
+              break;
+            case 5: // 左上
+              col = 1; row = 1; // 「左後」セル - row:1, col:1
+              flashlightOffsetX = -8;
+              flashlightOffsetY = -8;
+              break;
+            case 6: // 上 (背面)
+              col = 0; row = 0; // 「後」背面セル - row:0, col:0
+              flashlightOffsetX = -4;
+              flashlightOffsetY = -10;
+              break;
+            case 7: // 右上
+              col = 2; row = 1; // 「右後」セル - row:1, col:2
+              flashlightOffsetX = 8;
+              flashlightOffsetY = -8;
+              break;
+          }
+        } else if (spriteMode === '3x4') {
+          // 3列4行（正面、左、右、背面）
+          sw = imgW / 3;
+          sh = imgH / 4;
+          
+          // 歩行アニメフレーム: 0, 1, 2, 1
+          const animFrame = isMoving ? Math.floor(now / 150) % 4 : 1;
+          col = animFrame === 3 ? 1 : animFrame;
+
+          // 行判定 (0:下向き(正面), 1:左向き, 2:右向き, 3:上向き(背面))
+          switch (bucket) {
+            case 0: // 右
+              row = 2;
+              flashlightOffsetX = 10;
+              flashlightOffsetY = 4;
+              break;
+            case 1: // 右下
+              row = 0;
+              flashlightOffsetX = 8;
+              flashlightOffsetY = 8;
+              break;
+            case 2: // 下
+              row = 0;
+              flashlightOffsetX = 2;
+              flashlightOffsetY = 10;
+              break;
+            case 3: // 左下
+              row = 0;
+              flashlightOffsetX = -8;
+              flashlightOffsetY = 8;
+              break;
+            case 4: // 左
+              row = 1;
+              flashlightOffsetX = -10;
+              flashlightOffsetY = 4;
+              break;
+            case 5: // 左上
+              row = 3;
+              flashlightOffsetX = -8;
+              flashlightOffsetY = -8;
+              break;
+            case 6: // 上
+              row = 3;
+              flashlightOffsetX = -2;
+              flashlightOffsetY = -10;
+              break;
+            case 7: // 右上
+              row = 3;
+              flashlightOffsetX = 8;
+              flashlightOffsetY = -8;
+              break;
+          }
+        } else {
+          // 1x1単一画像
+          sw = imgW;
+          sh = imgH;
+          col = 0;
+          row = 0;
+          flashlightOffsetX = Math.cos(playerState.angle) * 12;
+          flashlightOffsetY = Math.sin(playerState.angle) * 12;
+        }
+
+        const dw = 32;
+        const dh = 32;
+
         ctx.save();
-        const blushGrad = ctx.createRadialGradient(
-          headX + 3.5, headY + ey + 1.6, 0,
-          headX + 3.5, headY + ey + 1.6, 2.5
+        ctx.translate(0, bounce);
+
+        // 各画像モードに合わせた左右反転処理
+        let scaleX = 1;
+        if (spriteMode === '1x1') {
+          if (normAngle > Math.PI / 2 && normAngle < 3 * Math.PI / 2) {
+            scaleX = -1;
+          }
+        } else if (spriteMode === '3x3') {
+          if (needFlipX) {
+            scaleX = -1;
+          }
+        }
+
+        if (scaleX !== 1) {
+          ctx.scale(scaleX, 1);
+        }
+
+        if (isMoving) {
+          const tilt = Math.sin(now * 0.015) * 0.05 * scaleX;
+          ctx.rotate(tilt);
+        }
+
+        ctx.drawImage(
+          img,
+          col * sw, row * sh, sw, sh,
+          -dw / 2, -dh / 2 - 2, dw, dh
         );
-        blushGrad.addColorStop(0, 'rgba(244, 63, 94, 0.65)');
-        blushGrad.addColorStop(1, 'rgba(244, 63, 94, 0.0)');
-        ctx.beginPath();
-        ctx.arc(headX + 3.5, headY + ey + 1.6, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = blushGrad;
-        ctx.fill();
+
         ctx.restore();
-      };
 
-      drawEye(-1.8); // 上側の目
-      drawEye(1.8);  // 下側の目
+        if (playerState.flashlightOn) {
+          ctx.save();
+          const lightX = flashlightOffsetX;
+          const lightY = flashlightOffsetY + bounce;
+          ctx.beginPath();
+          ctx.arc(lightX, lightY, 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#fef08a';
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = '#fde047';
+          ctx.fill();
+          ctx.restore();
+        }
+      } else {
+        if (dir === 'DOWN') {
+          // ==================== 【正面・下向き】 ====================
+          // --- 1. 後ろ側の足（奥のブーツ - 左足） ---
+          const lFootY = bodyY + 11.5 + (isMoving ? legStep : 0);
+          drawPart(() => {
+            ctx.arc(-3.5, lFootY, 2.5, 0, Math.PI * 2);
+          }, '#451a03');
 
-      // --- 7. 手袋とおてて ＆ 懐中電灯 ---
-      const handX = headX + 3;
-      const handY = headY + 4;
-      
-      // おてて（赤い手袋）
-      drawPart(() => {
-        ctx.arc(handX, handY, 2, 0, Math.PI * 2);
-      }, '#be123c');
+          // --- 2. 前側の足（手前のブーツ - 右足） ---
+          const rFootY = bodyY + 11.5 + (isMoving ? -legStep : 0);
+          drawPart(() => {
+            ctx.arc(3.5, rFootY, 2.5, 0, Math.PI * 2);
+          }, '#78350f');
 
-      // ポータブル懐中電灯本体
-      drawPart(() => {
-        ctx.rect(handX + 1, handY - 1.5, 4, 3);
-      }, '#78716c');
-      // 懐中電灯の先端（光線側。メタリックシルバー）
-      drawPart(() => {
-        ctx.rect(handX + 5, handY - 2.5, 2, 5);
-      }, '#e2e8f0');
+          // --- 3. 髪の後ろの大きな赤いリボン（両サイドに広がる大きなリボン） ---
+          const ribXLeft = -6;
+          const ribXRight = 6;
+          const ribY = headY - 1.5;
 
-      if (playerState.flashlightOn) {
-        // 先端が白熱灯のように光る演出
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(handX + 7.5, handY, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#fef08a';
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = '#fde047';
-        ctx.fill();
-        ctx.restore();
+          // 左羽
+          drawPart(() => {
+            ctx.moveTo(0, ribY);
+            ctx.quadraticCurveTo(ribXLeft - 7, ribY - 10 + ribbonAnim, ribXLeft - 11, ribY - 4 + ribbonAnim);
+            ctx.quadraticCurveTo(ribXLeft - 6, ribY + 4, 0, ribY);
+          }, '#ef4444');
+          // 右羽
+          drawPart(() => {
+            ctx.moveTo(0, ribY);
+            ctx.quadraticCurveTo(ribXRight + 7, ribY - 10 + ribbonAnim, ribXRight + 11, ribY - 4 + ribbonAnim);
+            ctx.quadraticCurveTo(ribXRight + 6, ribY + 4, 0, ribY);
+          }, '#ef4444');
+          // 結び目
+          drawPart(() => {
+            ctx.arc(0, ribY, 2.5, 0, Math.PI * 2);
+          }, '#be123c');
+
+          // --- 4. 体・ピンクのコートと白インナー（前向きお洋服） ---
+          // コートの本体
+          drawPart(() => {
+            ctx.beginPath();
+            ctx.arc(0, bodyY + 4.5, 6, 0, Math.PI * 2); // ポンチョ感
+          }, '#fda4af');
+
+          // 正面の白インナーシャツ/襟元
+          drawPart(() => {
+            ctx.moveTo(-2.5, bodyY + 0.5);
+            ctx.lineTo(2.5, bodyY + 0.5);
+            ctx.lineTo(1.5, bodyY + 5.5);
+            ctx.lineTo(-1.5, bodyY + 5.5);
+            ctx.closePath();
+          }, '#ffffff');
+
+          // 白インナーの中央 of 黒い小さなタイ/リボン
+          drawPart(() => {
+            ctx.arc(0, bodyY + 2.5, 1.2, 0, Math.PI * 2);
+          }, '#1e293b');
+
+          // マフラー/襟ふわふわ
+          drawPart(() => {
+            ctx.arc(-2.5, bodyY, 2.5, 0, Math.PI * 2);
+            ctx.arc(2.5, bodyY, 2.5, 0, Math.PI * 2);
+          }, '#ffe4e6');
+
+          // こげ茶プリーツスカート
+          drawPart(() => {
+            ctx.moveTo(-5.5, bodyY + 7.5);
+            ctx.lineTo(5.5, bodyY + 7.5);
+            ctx.lineTo(7.5, bodyY + 11.5);
+            ctx.lineTo(-7.5, bodyY + 11.5);
+            ctx.closePath();
+          }, '#3a221d');
+
+          // --- 5. 頭部（可愛いマロンブラウンの髪 & 丸い輪郭） ---
+          // 後ろ髪
+          drawPart(() => {
+            ctx.arc(0, headY, 8.5, 0, Math.PI * 2);
+          }, '#8f5c38');
+
+          // お顔（肌色スキン）
+          drawPart(() => {
+            ctx.arc(0, headY, 7.0, 0, Math.PI * 2);
+          }, '#ffe5d9');
+
+          // 前髪・サイド（耳は完全に隠れており、マッシュ調のおしとやかボブ）
+          drawPart(() => {
+            // 左サイド〜前髪〜右サイド
+            ctx.moveTo(-7.5, headY - 1.5);
+            ctx.quadraticCurveTo(-6.5, headY - 7.5, 0, headY - 7.5);
+            ctx.quadraticCurveTo(6.5, headY - 7.5, 7.5, headY - 1.5);
+            // 前髪の束（ギザギザと分け目）
+            ctx.quadraticCurveTo(4.5, headY, 3, headY + 1.5);
+            ctx.quadraticCurveTo(1.5, headY - 1.0, 0, headY - 1.0);
+            ctx.quadraticCurveTo(-1.5, headY + 1.5, -4, headY);
+            ctx.quadraticCurveTo(-6, headY, -7.5, headY - 1.5);
+            ctx.closePath();
+          }, '#8f5c38');
+
+          // 前髪ハイライト・少し明るいブラウン
+          drawPart(() => {
+            ctx.moveTo(-4, headY - 4.5);
+            ctx.quadraticCurveTo(0, headY - 4.0, 4, headY - 4.5);
+            ctx.lineTo(2, headY - 3.5);
+            ctx.quadraticCurveTo(0, headY - 3.0, -2, headY - 3.5);
+            ctx.closePath();
+          }, '#c19a6b');
+
+          // --- 6. うるうるの大きな黒目（左右の目） ---
+          const drawDownEye = (ex: number) => {
+            // 白目
+            drawPart(() => {
+              ctx.arc(ex, headY, 2.0, 0, Math.PI * 2);
+            }, '#ffffff');
+            // 黒目
+            drawPart(() => {
+              ctx.arc(ex, headY + 0.3, 1.2, 0, Math.PI * 2);
+            }, '#1e293b');
+            // キラメキ
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(ex + 0.5, headY - 0.4, 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.restore();
+
+            // 頬のぽわっと赤み
+            ctx.save();
+            const blush = ctx.createRadialGradient(ex, headY + 1.8, 0, ex, headY + 1.8, 2.2);
+            blush.addColorStop(0, 'rgba(244, 63, 94, 0.6)');
+            blush.addColorStop(1, 'rgba(244, 63, 94, 0.0)');
+            ctx.beginPath();
+            ctx.arc(ex, headY + 1.8, 2.2, 0, Math.PI * 2);
+            ctx.fillStyle = blush;
+            ctx.fill();
+            ctx.restore();
+          };
+
+          drawDownEye(-3.0); // 左目
+          drawDownEye(3.0);  // 右目
+
+          // お口
+          ctx.save();
+          ctx.strokeStyle = '#3a221d';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(-1, headY + 2.8);
+          ctx.quadraticCurveTo(0, headY + 3.6, 1, headY + 2.8);
+          ctx.stroke();
+          ctx.restore();
+
+          // --- 7. 手と懐中電灯（下方向に照らす） ---
+          const handX = 4.0;
+          const handY = bodyY + 4.5;
+          // おてて
+          drawPart(() => {
+            ctx.arc(handX, handY, 1.8, 0, Math.PI * 2);
+          }, '#be123c');
+          // 懐中電灯本体
+          drawPart(() => {
+            ctx.rect(handX - 1.2, handY, 2.4, 3.5);
+          }, '#78716c');
+          drawPart(() => {
+            ctx.rect(handX - 2.0, handY + 3.5, 4.0, 2);
+          }, '#e2e8f0');
+
+          if (playerState.flashlightOn) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(handX, handY + 5.5, 2.0, 0, Math.PI * 2);
+            ctx.fillStyle = '#fef08a';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#fde047';
+            ctx.fill();
+            ctx.restore();
+          }
+        } else if (dir === 'UP') {
+          // ==================== 【後ろ姿・上向き】 ====================
+          // --- 1. 後ろ側の足（奥のブーツ） ---
+          const lFootY = bodyY + 11.5 + (isMoving ? legStep : 0);
+          drawPart(() => {
+            ctx.arc(-3.5, lFootY, 2.5, 0, Math.PI * 2);
+          }, '#451a03');
+
+          // --- 2. 前側の足（手前のブーツ） ---
+          const rFootY = bodyY + 11.5 + (isMoving ? -legStep : 0);
+          drawPart(() => {
+            ctx.arc(3.5, rFootY, 2.5, 0, Math.PI * 2);
+          }, '#78350f');
+
+          // --- 3. 後ろ髪 (後頭部丸ごとブラウン) ---
+          drawPart(() => {
+            ctx.arc(0, headY, 8.5, 0, Math.PI * 2);
+          }, '#8f5c38');
+
+          // 後ろ髪の結び目束・おさげ表現、髪のウェーブ質感
+          drawPart(() => {
+            ctx.moveTo(-5, headY + 3);
+            ctx.quadraticCurveTo(0, headY + 7.5, 5, headY + 3);
+            ctx.quadraticCurveTo(0, headY + 4.5, -5, headY + 3);
+            ctx.closePath();
+          }, '#5f3f2d');
+
+          // --- 4. 後頭部の大きい赤いリボン (しっかり真ん中に配置) ---
+          const ribY = headY - 4.5;
+          const ribXLeft = -6;
+          const ribXRight = 6;
+          // 左羽
+          drawPart(() => {
+            ctx.moveTo(0, ribY);
+            ctx.quadraticCurveTo(ribXLeft - 6, ribY - 11 + ribbonAnim, ribXLeft - 10, ribY - 5 + ribbonAnim);
+            ctx.quadraticCurveTo(ribXLeft - 5, ribY + 3, 0, ribY);
+          }, '#ef4444');
+          // 右羽
+          drawPart(() => {
+            ctx.moveTo(0, ribY);
+            ctx.quadraticCurveTo(ribXRight + 6, ribY - 11 + ribbonAnim, ribXRight + 10, ribY - 5 + ribbonAnim);
+            ctx.quadraticCurveTo(ribXRight + 5, ribY + 3, 0, ribY);
+          }, '#ef4444');
+          // 結び目
+          drawPart(() => {
+            ctx.arc(0, ribY, 2.6, 0, Math.PI * 2);
+          }, '#be123c');
+
+          // --- 5. 体・ピンクのお洋服 (後ろから見たコート) ---
+          drawPart(() => {
+            ctx.beginPath();
+            ctx.arc(0, bodyY + 4.5, 6, 0, Math.PI * 2);
+          }, '#fda4af');
+
+          // 首元の襟（ふわふわ白い襟）
+          drawPart(() => {
+            ctx.beginPath();
+            ctx.arc(-2, bodyY, 2.2, 0, Math.PI * 2);
+            ctx.arc(2, bodyY, 2.2, 0, Math.PI * 2);
+          }, '#ffe4e6');
+
+          // スカート
+          drawPart(() => {
+            ctx.moveTo(-5.5, bodyY + 7.5);
+            ctx.lineTo(5.5, bodyY + 7.5);
+            ctx.lineTo(7.5, bodyY + 11.5);
+            ctx.lineTo(-7.5, bodyY + 11.5);
+            ctx.closePath();
+          }, '#3a221d');
+
+          // --- 6. 懐中電灯 (後ろ姿、上方向に照らす) ---
+          const handX = -4.0;
+          const handY = bodyY + 4.5;
+          // 手
+          drawPart(() => {
+            ctx.arc(handX, handY, 1.8, 0, Math.PI * 2);
+          }, '#be123c');
+          // 懐中電灯上
+          drawPart(() => {
+            ctx.rect(handX - 1.2, handY - 3.5, 2.4, 3.5);
+          }, '#78716c');
+          drawPart(() => {
+            ctx.rect(handX - 2.0, handY - 5.5, 4.0, 2);
+          }, '#e2e8f0');
+
+          if (playerState.flashlightOn) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(handX, handY - 5.5, 2.0, 0, Math.PI * 2);
+            ctx.fillStyle = '#fef08a';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#fde047';
+            ctx.fill();
+            ctx.restore();
+          }
+        } else {
+          // ==================== 【横向きプロファイル (LEFT/RIGHT)】 ====================
+          ctx.save();
+          if (dir === 'LEFT') {
+            ctx.scale(-1, 1); // 左向きの場合は完全に反転させて描画
+          }
+
+          // --- 1. 後ろ側の足（奥のブーツ） ---
+          drawPart(() => {
+            const lx = -4 - (isMoving ? 1 : 0);
+            const ly = bodyY + 11.5 - legStep;
+            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+          }, '#451a03');
+
+          // --- 2. 前側の足（手前のブーツ） ---
+          drawPart(() => {
+            const rx = -3 - (isMoving ? 1 : 0);
+            const ry = bodyY + 11.5 + legStep;
+            ctx.arc(rx, ry, 3.2, 0, Math.PI * 2);
+          }, '#78350f');
+
+          // --- 3. 髪の後ろの大きな赤いリボン（後ろ側になびくおめかしリボン） ---
+          const ribX = headX - 5.5;
+          const ribY = headY;
+          // 上側のリボン
+          drawPart(() => {
+            ctx.moveTo(ribX, ribY);
+            ctx.quadraticCurveTo(ribX - 6, ribY - 8 + ribbonAnim, ribX - 8, ribY - 5 + ribbonAnim);
+            ctx.quadraticCurveTo(ribX - 4, ribY - 2, ribX, ribY);
+          }, '#ef4444');
+          // 下側のリボン
+          drawPart(() => {
+            ctx.moveTo(ribX, ribY);
+            ctx.quadraticCurveTo(ribX - 6, ribY + 8 - ribbonAnim, ribX - 8, ribY + 5 - ribbonAnim);
+            ctx.quadraticCurveTo(ribX - 4, ribY + 2, ribX, ribY);
+          }, '#ef4444');
+          // 結び目
+          drawPart(() => {
+            ctx.arc(ribX, ribY, 2.2, 0, Math.PI * 2);
+          }, '#be123c');
+
+          // --- 4. 体・ピンクのコート ---
+          const bodyX = -2;
+          const bodyH = 10;
+          drawPart(() => {
+            ctx.arc(bodyX, bodyY + 4.5, bodyH / 2, 0, Math.PI * 2);
+          }, '#fda4af');
+
+          // 白いもこもこマフラー襟
+          drawPart(() => {
+            ctx.arc(bodyX + 2, bodyY + 1.0, 3.5, 0, Math.PI * 2);
+          }, '#ffe4e6');
+
+          // スカート
+          drawPart(() => {
+            ctx.rect(bodyX - 3.5, bodyY + 8.5, 7.5, 3);
+          }, '#3a221d');
+
+          // --- 5. 頭部（栗色ボブ＆顔） ---
+          drawPart(() => {
+            ctx.arc(headX - 1.5, headY, 8.5, 0, Math.PI * 2);
+          }, '#8f5c38');
+
+          // お顔（肌色スキン）
+          drawPart(() => {
+            ctx.arc(headX + 2.5, headY, 6.5, -Math.PI / 2, Math.PI / 2);
+            ctx.lineTo(headX, headY + 6.5);
+            ctx.lineTo(headX, headY - 6.5);
+            ctx.closePath();
+          }, '#ffe5d9');
+
+          // 前髪・おしとやかサイドヘア
+          drawPart(() => {
+            ctx.moveTo(headX + 1, headY - 6.5);
+            ctx.quadraticCurveTo(headX + 4.5, headY - 3, headX + 4.5, headY);
+            ctx.quadraticCurveTo(headX + 4.5, headY + 3, headX + 1, headY + 6.5);
+            ctx.lineTo(headX - 1.5, headY + 6.5);
+            ctx.lineTo(headX - 1.5, headY - 6.5);
+            ctx.closePath();
+          }, '#8f5c38');
+
+          // 前髪ハイライト
+          drawPart(() => {
+            ctx.moveTo(headX + 1.5, headY - 3.5);
+            ctx.quadraticCurveTo(headX + 3.8, headY, headX + 1.5, headY + 3.5);
+            ctx.closePath();
+          }, '#c19a6b');
+
+          // 後ろ髪のコロンとした内巻き
+          drawPart(() => {
+            ctx.arc(headX - 4, headY, 5.5, 0, Math.PI * 2);
+          }, '#5f3f2d');
+
+          // --- 6. うるうるの右プロフィール目 ---
+          const drawProfileEye = (ey: number) => {
+            // 白目ベース
+            drawPart(() => {
+              ctx.arc(headX + 4.0, headY + ey, 2.2, 0, Math.PI * 2);
+            }, '#ffffff');
+            // 黒目
+            drawPart(() => {
+              ctx.arc(headX + 4.5, headY + ey + 0.3, 1.3, 0, Math.PI * 2);
+            }, '#1e293b');
+
+            // キラメキ
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(headX + 5.2, headY + ey - 0.4, 0.6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.restore();
+
+            // チーク
+            ctx.save();
+            const blushGradHeight = ctx.createRadialGradient(
+              headX + 3.5, headY + ey + 1.6, 0,
+              headX + 3.5, headY + ey + 1.6, 2.5
+            );
+            blushGradHeight.addColorStop(0, 'rgba(244, 63, 94, 0.65)');
+            blushGradHeight.addColorStop(1, 'rgba(244, 63, 94, 0.0)');
+            ctx.beginPath();
+            ctx.arc(headX + 3.5, headY + ey + 1.6, 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = blushGradHeight;
+            ctx.fill();
+            ctx.restore();
+          };
+
+          drawProfileEye(0.0);
+
+          // --- 7. 手と懐中電灯（右方向に照らす） ---
+          const handX = headX + 3.0;
+          const handY = headY + 4.0;
+          // 手
+          drawPart(() => {
+            ctx.arc(handX, handY, 1.8, 0, Math.PI * 2);
+          }, '#be123c');
+          // 懐中電灯プロファイル
+          drawPart(() => {
+            ctx.rect(handX + 1.0, handY - 1.2, 3.5, 2.4);
+          }, '#78716c');
+          drawPart(() => {
+            ctx.rect(handX + 4.5, handY - 2.0, 1.8, 4.0);
+          }, '#e2e8f0');
+
+          if (playerState.flashlightOn) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(handX + 6.3, handY, 2.0, 0, Math.PI * 2);
+            ctx.fillStyle = '#fef08a';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#fde047';
+            ctx.fill();
+            ctx.restore();
+          }
+
+          ctx.restore(); // scale反転の終了
+        }
       }
-
-
     } else {
       // 隠れている時のプレイヤー位置（うっすら半透明 zzz マーク）
       ctx.fillStyle = '#38bdf8';

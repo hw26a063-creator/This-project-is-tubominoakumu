@@ -13,9 +13,50 @@ import tubomiImage from '../assets/images/tubomi2.png';
 let cachedTubomiCanvas: HTMLCanvasElement | null = null;
 let isTubomiLoadFailedGlobal = false;
 
+interface FloorDecoration {
+  x: number;
+  y: number;
+  type: 'BLOOD' | 'CRACK' | 'WATER' | 'TRASH';
+  size: number;
+}
+
+const FLOOR_DECORATIONS: FloorDecoration[] = [
+  // 北西エリア (スタート部屋、隔離病棟)
+  { x: 100, y: 150, type: 'CRACK', size: 25 },
+  { x: 200, y: 80, type: 'BLOOD', size: 15 },
+  { x: 80, y: 220, type: 'TRASH', size: 12 },
+  { x: 230, y: 180, type: 'CRACK', size: 18 },
+  // 北東エリア (薬品庫、手術室。凄惨な血痕多め)
+  { x: 950, y: 100, type: 'BLOOD', size: 30 },
+  { x: 1050, y: 150, type: 'WATER', size: 40 },
+  { x: 900, y: 250, type: 'CRACK', size: 20 },
+  { x: 1100, y: 70, type: 'TRASH', size: 18 },
+  { x: 1000, y: 300, type: 'BLOOD', size: 45 },
+  { x: 1120, y: 220, type: 'BLOOD', size: 25 },
+  // 中央エリア（ナースステーション周辺。水たまりやひび割れ）
+  { x: 450, y: 400, type: 'WATER', size: 35 },
+  { x: 750, y: 420, type: 'BLOOD', size: 20 },
+  { x: 400, y: 600, type: 'CRACK', size: 30 },
+  { x: 800, y: 620, type: 'TRASH', size: 15 },
+  { x: 380, y: 480, type: 'WATER', size: 25 },
+  { x: 840, y: 500, type: 'CRACK', size: 22 },
+  // 南西エリア (大部屋病室。割れたガラスやゴミ)
+  { x: 120, y: 950, type: 'CRACK', size: 22 },
+  { x: 250, y: 1050, type: 'BLOOD', size: 25 },
+  { x: 300, y: 900, type: 'WATER', size: 28 },
+  { x: 80, y: 1000, type: 'TRASH', size: 14 },
+  { x: 350, y: 1120, type: 'CRACK', size: 35 },
+  // 南東エリア (物置、倉庫、最深部)
+  { x: 1000, y: 950, type: 'BLOOD', size: 35 },
+  { x: 850, y: 1000, type: 'CRACK', size: 18 },
+  { x: 900, y: 1100, type: 'WATER', size: 30 },
+  { x: 1050, y: 1050, type: 'TRASH', size: 16 },
+  { x: 820, y: 920, type: 'BLOOD', size: 20 }
+];
+
 interface GameCanvasProps {
   isPaused: boolean;
-  onPauseToggle: () => void;
+  onPauseToggle: (tab?: 'MAIN' | 'BAG' | 'MAP') => void;
   playerState: Player;
   setPlayerState: React.Dispatch<React.SetStateAction<Player>>;
   map: GameMap;
@@ -276,11 +317,18 @@ export default function GameCanvas({
   const mapRef = useRef<GameMap>(map);
   const isPausedRef = useRef<boolean>(isPaused);
   const hudSyncCounter = useRef<number>(0);
+  const shadowCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // 外部（リスタート、リスポーン、ベッド隠れ/脱出、ライトスイッチング、薬使用など）による状態変化を検知して Ref を同期
-  const lastX = useRef<number>(playerState.x);
-  const lastY = useRef<number>(playerState.y);
-  const isLocalCoords = Math.abs(playerState.x - playerStateRef.current.x) < 8 && Math.abs(playerState.y - playerStateRef.current.y) < 8;
+  const lastSentX = useRef<number>(playerState.x);
+  const lastSentY = useRef<number>(playerState.y);
+
+  // 通常の移動（1フレームに数ピクセル）を遥かに超える30px以上の大きな座標のズレ、
+  // または初期スポーン位置へのリセット、ポーズ中の時のみ、外部からの明示的な「ワープ（リスポーン）」と判断して位置同期を許可する
+  const isLargeWarp = Math.abs(playerState.x - playerStateRef.current.x) > 30 || Math.abs(playerState.y - playerStateRef.current.y) > 30;
+  const isSpawnReset = playerState.x === 65 && playerState.y === 95;
+  const isExternalWarp = isPaused || isLargeWarp || isSpawnReset;
+
   const otherStatesMatch = 
     playerState.isHiding === playerStateRef.current.isHiding &&
     playerState.flashlightOn === playerStateRef.current.flashlightOn &&
@@ -288,11 +336,27 @@ export default function GameCanvas({
     playerState.largeMedsCount === playerStateRef.current.largeMedsCount &&
     playerState.san === playerStateRef.current.san;
 
-  if (!isLocalCoords || !otherStatesMatch || (playerState.x === 65 && playerState.y === 95)) {
-    playerStateRef.current = playerState;
+  if (isExternalWarp || !otherStatesMatch) {
+    playerStateRef.current = {
+      ...playerStateRef.current,
+      // 外部からの明示的な位置ワープのときのみ座標を同期、それ以外はRefの現在位置を完全に信頼する
+      x: isExternalWarp ? playerState.x : playerStateRef.current.x,
+      y: isExternalWarp ? playerState.y : playerStateRef.current.y,
+      isHiding: playerState.isHiding,
+      hidingInId: playerState.hidingInId,
+      flashlightOn: playerState.flashlightOn,
+      smallMedsCount: playerState.smallMedsCount,
+      largeMedsCount: playerState.largeMedsCount,
+      san: playerState.san,
+      stamina: playerState.stamina,
+      keysCollected: playerState.keysCollected
+    };
+    
+    if (isExternalWarp) {
+      lastSentX.current = playerState.x;
+      lastSentY.current = playerState.y;
+    }
   }
-  lastX.current = playerState.x;
-  lastY.current = playerState.y;
 
   monstersRef.current = monsters;
   mapRef.current = map;
@@ -425,13 +489,35 @@ export default function GameCanvas({
   // キーボードイベントのバインド
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
       const key = e.key.toLowerCase();
+      
+      // 移動キー、スペース、シフトなどのデフォルトスクロール/挙動を常に防止
+      // 長押し（repeat）のイベントでもスクロールを防ぐ必要があるため、e.repeat のチェック前に実行します
+      const preventKeys = [
+        'w', 'a', 's', 'd', 
+        'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 
+        'shift', ' ', 'spacebar'
+      ];
+      if (preventKeys.includes(key)) {
+        e.preventDefault();
+      }
+
+      if (e.repeat) {
+        keysPressed.current[key] = true;
+        return;
+      }
       
       // ポーズ（Esc）
       if (key === 'escape') {
         e.preventDefault();
-        onPauseToggle();
+        onPauseToggle('MAIN');
+        return;
+      }
+
+      // 地図表示（M）
+      if (key === 'm') {
+        e.preventDefault();
+        onPauseToggle('MAP');
         return;
       }
 
@@ -468,9 +554,9 @@ export default function GameCanvas({
       keysPressed.current = {};
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
+    window.addEventListener('keyup', handleKeyUp, { passive: true });
+    window.addEventListener('blur', handleBlur, { passive: true });
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -478,6 +564,31 @@ export default function GameCanvas({
       window.removeEventListener('blur', handleBlur);
     };
   }, [isPaused, playerState.isHiding, onPauseToggle, toggleHidingState]);
+
+  // ブラウザ全体のスクロールを完全に非表示・封殺するEffect
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    
+    // スクロールバーを完全に隠し、コンテンツが動かないようにする
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    // プレイ中にスクロールが発生した場合は、即座に(0, 0)に引き戻す
+    const handleScroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   // モニター用：心音のテンポ制御 ＆ SAN値の自然減少等のゲームループ
   useEffect(() => {
@@ -609,7 +720,7 @@ export default function GameCanvas({
       }
     }
 
-    // 3. プレイヤー位置の更新（壁との衝突判定）
+    // 3. プレイヤー位置の更新（壁との衝突判定：スライディング ＆ 押し出し）
     let nextX = player.x;
     let nextY = player.y;
     let playerAngle = player.angle;
@@ -622,18 +733,61 @@ export default function GameCanvas({
 
       playerAngle = Math.atan2(dy, dx);
 
-      // X方向の当たり判定
-      if (!checkCollision(player.x + moveX, player.y, 12)) {
-        nextX = player.x + moveX;
-      }
-      // Y方向の当たり判定
-      if (!checkCollision(nextX, player.y + moveY, 12)) {
-        nextY = player.y + moveY;
-      }
+      // 移動先ターゲット
+      const targetX = player.x + moveX;
+      const targetY = player.y + moveY;
 
-      // マップ端制限
-      nextX = Math.max(15, Math.min(map.width - 15, nextX));
-      nextY = Math.max(15, Math.min(map.height - 15, nextY));
+      // 1) 斜めを含めた直接移動が安全な場合
+      if (!checkCollision(targetX, targetY, 12)) {
+        nextX = targetX;
+        nextY = targetY;
+      } else {
+        // 2) 直接移動できない場合、X方向のみの移動（滑り）をテスト
+        const canMoveX = !checkCollision(targetX, player.y, 12);
+        // 3) Y方向のみの移動（滑り）をテスト
+        const canMoveY = !checkCollision(player.x, targetY, 12);
+
+        if (canMoveX && !canMoveY) {
+          nextX = targetX;
+          nextY = player.y;
+        } else if (!canMoveX && canMoveY) {
+          nextX = player.x;
+          nextY = targetY;
+        } else if (canMoveX && canMoveY) {
+          // 両方行けるが斜めがぶつかる場合、より移動量の大きい方を優先
+          if (Math.abs(moveX) >= Math.abs(moveY)) {
+            nextX = targetX;
+            nextY = player.y;
+          } else {
+            nextX = player.x;
+            nextY = targetY;
+          }
+        } else {
+          // 4) どちらもぶつかる場合は移動しない
+          nextX = player.x;
+          nextY = player.y;
+        }
+      }
+    }
+
+    // 4. マップ境界外へのすり抜け・めり込み防止の強制クランプ ＆ 壁中めり込み時の超強力引き戻し
+    nextX = Math.max(15, Math.min(map.width - 15, nextX));
+    nextY = Math.max(15, Math.min(map.height - 15, nextY));
+
+    // [超重要] もし更新後の座標 (nextX, nextY) が「壁の内部」にめり込んでいる場合、
+    // 即座に前フレームの安全な座標、もしくはセーブ座標、スポーン座標に強制引き戻しする。
+    // これにより、壁を突き抜けて外（下や横）に出るバグは物理的に100%完全に防がれます。
+    if (checkCollision(nextX, nextY, 12)) {
+      if (!checkCollision(player.x, player.y, 12)) {
+        nextX = player.x;
+        nextY = player.y;
+      } else if (player.saveX && !checkCollision(player.saveX, player.saveY, 12)) {
+        nextX = player.saveX;
+        nextY = player.saveY;
+      } else {
+        nextX = map.spawnX || 65;
+        nextY = map.spawnY || 95;
+      }
     }
 
     // SAN値（正気度）の減少
@@ -930,6 +1084,8 @@ export default function GameCanvas({
     hudSyncCounter.current++;
     if (hudSyncCounter.current >= 3) {
       hudSyncCounter.current = 0;
+      lastSentX.current = player.x;
+      lastSentY.current = player.y;
       setPlayerState({
         ...player
       });
@@ -1005,6 +1161,8 @@ export default function GameCanvas({
 
     // Ref と React State を同時に即時更新
     playerStateRef.current = nextPlayerState;
+    lastSentX.current = nextPlayerState.x;
+    lastSentY.current = nextPlayerState.y;
     setPlayerState(nextPlayerState);
   }
 
@@ -1070,17 +1228,42 @@ export default function GameCanvas({
     const transX = viewWidth / 2 - cameraX;
     const transY = viewHeight / 2 - cameraY;
 
-    // 1. 背景の塗りつぶし（コンクリートの不気味な薄汚れ床）
-    ctx.fillStyle = '#0c0a09'; // ほぼ漆黒に近いブラウン
+    // 1. 背景の塗りつぶし（マップ外側の不気味な虚無空間）
+    ctx.fillStyle = '#050403'; 
     ctx.fillRect(0, 0, viewWidth, viewHeight);
 
     // カメラトランスフォームの開始
     ctx.save();
     ctx.translate(transX, transY);
 
-    // リノリウム／病院の古いタイルフロア風のライン描画
-    ctx.strokeStyle = '#1c1917';
-    ctx.lineWidth = 1;
+    // 1.1. マッププレイ可能領域全体のベース床（不気味な廊下：暗いコンクリート調）
+    ctx.fillStyle = '#141110'; 
+    ctx.fillRect(0, 0, map.width, map.height);
+
+    // 1.2. 各病棟・個室エリアの床を異なる不気味なカラーで塗りつぶし
+    // 北西：隔離病棟・個室（スタート地点。不気味な薄汚れグリーンタイル調）
+    ctx.fillStyle = '#16221b';
+    ctx.fillRect(15, 15, 305, 245);
+
+    // 北東：薬品庫・手術室（冷たく無機質なブルーグレーのプラスチックタイル床）
+    ctx.fillStyle = '#1a222c';
+    ctx.fillRect(860, 15, 325, 335);
+
+    // 南西：大部屋病室 W-104 & レクリエーション室（血の通わない青紫の古いじゅうたん風）
+    ctx.fillStyle = '#141c28';
+    ctx.fillRect(15, 860, 425, 325);
+
+    // 南東：物置・倉庫（湿気った不気味な錆ブラウンのコンクリート床）
+    ctx.fillStyle = '#221915';
+    ctx.fillRect(740, 800, 445, 385);
+
+    // 中央：脱出扉室・ナースステーション（危険や緊張を促す、かすれた血のようなダークレッド床）
+    ctx.fillStyle = '#291417';
+    ctx.fillRect(500, 480, 200, 100);
+
+    // リノリウム／病院の古いタイルフロア風のグリッドライン描画（床ごとに馴染むよう少し不透明度を調整）
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.lineWidth = 1.5;
     const tileSize = 60;
     for (let x = 0; x < map.width; x += tileSize) {
       ctx.beginPath();
@@ -1095,15 +1278,74 @@ export default function GameCanvas({
       ctx.stroke();
     }
 
-    // 部屋名テキストなどをうっすら描画（ホラー演出）
-    ctx.font = 'bold 11px monospace';
-    ctx.fillStyle = 'rgba(120,113,108,0.15)';
-    ctx.fillText("隔離室 // W-102", 100, 100);
-    ctx.fillText("ナースステーション", 510, 480);
-    ctx.fillText("手術室 // AREA-B", 920, 150);
-    ctx.fillText("薬品保管庫", 930, 800);
-    ctx.fillText("患者A・B大部屋", 150, 750);
-    ctx.fillText("中央脱出扉", 565, 545);
+    // 1.5. 床の汚れやホラー装飾 (FLOOR_DECORATIONS) の描画（カメラ移動時の目印 ＆ 演出）
+    FLOOR_DECORATIONS.forEach(deco => {
+      ctx.save();
+      ctx.translate(deco.x, deco.y);
+      
+      if (deco.type === 'BLOOD') {
+        // 血痕：不気味な半透明の赤いスプラッシュ
+        const bloodGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, deco.size);
+        bloodGrad.addColorStop(0, 'rgba(153, 27, 27, 0.7)'); // 濃い暗赤
+        bloodGrad.addColorStop(0.5, 'rgba(127, 29, 29, 0.4)');
+        bloodGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = bloodGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, deco.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 飛び散った小さな血痕
+        ctx.fillStyle = 'rgba(127, 29, 29, 0.55)';
+        for (let j = 0; j < 3; j++) {
+          const sx = Math.sin(j * 2) * (deco.size * 0.7);
+          const sy = Math.cos(j * 2) * (deco.size * 0.7);
+          ctx.beginPath();
+          ctx.arc(sx, sy, deco.size * 0.15, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (deco.type === 'CRACK') {
+        // タイルのひび割れ：細いダークグレイのギザギザ
+        ctx.strokeStyle = '#292524';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-deco.size/2, -deco.size/4);
+        ctx.lineTo(-deco.size/8, deco.size/8);
+        ctx.lineTo(deco.size/8, -deco.size/8);
+        ctx.lineTo(deco.size/2, deco.size/4);
+        ctx.stroke();
+      } else if (deco.type === 'WATER') {
+        // 水たまり：少し青みがかった反射する床汚れ
+        const waterGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, deco.size);
+        waterGrad.addColorStop(0, 'rgba(28, 25, 23, 0.6)');
+        waterGrad.addColorStop(0.7, 'rgba(12, 74, 96, 0.15)'); // かすかに青緑
+        waterGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = waterGrad;
+        ctx.beginPath();
+        // 綺麗な円ではなく少し平たく潰れた楕円形状
+        ctx.scale(1.3, 0.8);
+        ctx.arc(0, 0, deco.size / 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (deco.type === 'TRASH') {
+        // 散らばったカルテやガラス破片のイメージ
+        ctx.fillStyle = 'rgba(120, 113, 108, 0.3)'; // かすれた紙の白
+        ctx.fillRect(-deco.size/2, -deco.size/3, deco.size, deco.size/1.5);
+        ctx.strokeStyle = 'rgba(120, 113, 108, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-deco.size/2, -deco.size/3, deco.size, deco.size/1.5);
+        
+        // 書類の文字に見えるうっすら横線
+        ctx.strokeStyle = 'rgba(68, 64, 60, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(-deco.size/3, -deco.size/6);
+        ctx.lineTo(deco.size/3, -deco.size/6);
+        ctx.moveTo(-deco.size/3, 0);
+        ctx.lineTo(deco.size/4, 0);
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+
+
 
     // 2. 脱出扉（中央）を描画
     ctx.fillStyle = '#2d060e'; // 錆びついて血のにじんだ赤扉
@@ -1155,11 +1397,29 @@ export default function GameCanvas({
 
     // 4. 壁（障害物）の描画
     map.obstacles.forEach(o => {
-      ctx.fillStyle = o.color || '#1c1917'; // コンクリートの堅牢なグレー黒
+      // 陰影のある立体壁（壁の下部、または全体のコンクリート石壁）
+      ctx.fillStyle = '#2d2724'; // 暗めの石材、またはレンガブロック
       ctx.fillRect(o.x, o.y, o.width, o.height);
-      ctx.strokeStyle = '#2e2a24'; // レンガ風ボーダー
-      ctx.lineWidth = 1;
+
+      // 壁の上部の縁（笠木・ハイライト）を描画して立体感を強調
+      // これにより、懐中電灯が当たったときに壁がハッキリと浮き上がります
+      const border = 3.5;
+      if (o.width > border * 2 && o.height > border * 2) {
+        ctx.fillStyle = '#57514e'; // 壁の上面（少し明るい砂岩／コンクリートグレイ）
+        ctx.fillRect(o.x + border, o.y + border, o.width - border * 2, o.height - border * 2);
+      }
+
+      // 壁全体のハッキリした輪郭境界線
+      ctx.strokeStyle = '#0c0a09';
+      ctx.lineWidth = 1.5;
       ctx.strokeRect(o.x, o.y, o.width, o.height);
+
+      // 病院の汚れたひび割れなどの追加ドット（座標依存シードで固定）
+      const wallSeed = (o.x * 3 + o.y * 7) % 100;
+      if (wallSeed > 60 && o.width > 25 && o.height > 25) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fillRect(o.x + 8, o.y + 8, o.width - 16, 3);
+      }
     });
 
     // 5. アイテムの描画（ピチピチ光る）
@@ -1952,6 +2212,7 @@ export default function GameCanvas({
           ctx.restore(); // scale反転の終了
         }
       }
+      ctx.restore(); // プレイヤーローカルトランスフォームの終了（1538行目のsaveに対する復元）
     } else {
       // 隠れている時のプレイヤー位置（うっすら半透明 zzz マーク）
       ctx.fillStyle = '#38bdf8';
@@ -1966,11 +2227,17 @@ export default function GameCanvas({
     // これにより、病院の薄暗いホラー夜廻風の完璧なビジュアルが瞬時に完成します。
     ctx.save();
     
-    // バックグラウンド全体を暗闇に包む
-    const shadowCanvas = document.createElement('canvas');
-    shadowCanvas.width = viewWidth;
-    shadowCanvas.height = viewHeight;
+    // バックグラウンド全体を暗闇に包む（キャッシュされた shadowCanvasRef を利用してガベージコレクションをゼロに）
+    if (!shadowCanvasRef.current) {
+      shadowCanvasRef.current = document.createElement('canvas');
+    }
+    const shadowCanvas = shadowCanvasRef.current;
+    if (shadowCanvas.width !== viewWidth || shadowCanvas.height !== viewHeight) {
+      shadowCanvas.width = viewWidth;
+      shadowCanvas.height = viewHeight;
+    }
     const sCtx = shadowCanvas.getContext('2d')!;
+    sCtx.clearRect(0, 0, viewWidth, viewHeight); // 前フレームのピクセルをクリア
 
     sCtx.fillStyle = '#090504'; // ほぼ漆黒
     sCtx.fillRect(0, 0, viewWidth, viewHeight);
@@ -2108,6 +2375,16 @@ export default function GameCanvas({
 
     // ドットをマッピングする倍率 (1200 → 100px)
     const mmScale = mmSize / map.width;
+
+    // 壁（障害物）を縮尺に合わせてミニマップに描画
+    ctx.fillStyle = 'rgba(120, 113, 108, 0.45)';
+    map.obstacles.forEach(o => {
+      const ox = mmX + o.x * mmScale;
+      const oy = mmY + o.y * mmScale;
+      const ow = o.width * mmScale;
+      const oh = o.height * mmScale;
+      ctx.fillRect(ox, oy, ow, oh);
+    });
 
     // プレイヤーのドット
     const mpx = mmX + playerState.x * mmScale;

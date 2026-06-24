@@ -32,32 +32,54 @@ const INITIAL_OBSTACLES: Obstacle[] = [
   { x: 685, y: 480, width: 15, height: 100 },
 
   // 3. 北西エリア（つぼみのスタート個室 & 隔離病棟）
-  { x: 15, y: 260, width: 320, height: 20 }, // 南側仕切り
-  { x: 320, y: 15, width: 20, height: 260 },  // 東側仕切り
+  { x: 15, y: 260, width: 240, height: 20 }, // 南側仕切り
+  { x: 320, y: 15, width: 20, height: 190 },  // 東側仕切り
   // 個室内仕切り
   { x: 140, y: 15, width: 15, height: 120 },
-  { x: 15, y: 120, width: 100, height: 15 },
+  { x: 15, y: 120, width: 80, height: 15 },
 
   // 4. 北東エリア（薬品庫、手術室。細かめの廊下仕切り）
-  { x: 860, y: 15, width: 20, height: 350 },   // 西側仕切り
-  { x: 860, y: 350, width: 325, height: 20 },  // 南側仕切り
+  { x: 860, y: 15, width: 20, height: 270 },   // 西側仕切り
+  { x: 860, y: 350, width: 240, height: 20 },  // 南側仕切り
   // 小部屋
   { x: 860, y: 180, width: 150, height: 15 },
   { x: 1010, y: 180, width: 15, height: 100 },
 
   // 5. 南西エリア（大部屋病室 W-104 & レクリエーション室）
-  { x: 15, y: 860, width: 440, height: 20 },   // 北側仕切り
-  { x: 440, y: 700, width: 20, height: 485 },  // 東側仕切り
+  { x: 15, y: 860, width: 360, height: 20 },   // 北側仕切り
+  { x: 440, y: 770, width: 20, height: 415 },  // 東側仕切り
   // 病室内ベッド間セパレーター
   { x: 150, y: 860, width: 15, height: 160 },
   { x: 300, y: 860, width: 15, height: 160 },
 
-  // 6. 南東エリア（物置、死体安置室またはボイラー室）
-  { x: 740, y: 800, width: 445, height: 20 },  // 北側仕切り
-  { x: 740, y: 800, width: 20, height: 385 },  // 西側仕切り
+  // 6. 南東エリア（物置、資材倉庫。ボイラー室は中南へ独立）
+  { x: 740, y: 800, width: 360, height: 20 },  // 北側仕切り
+  { x: 740, y: 870, width: 20, height: 315 },  // 西側仕切り
   // 物置個室
   { x: 960, y: 820, width: 15, height: 180 },
   { x: 740, y: 1000, width: 140, height: 15 },
+
+  // --- 【追加部屋 1】 中西：面談・カウンセリング室 (W-103) ---
+  { x: 15, y: 380, width: 180, height: 20 },  // 北側壁（右端を空けて通路に）
+  { x: 15, y: 560, width: 180, height: 20 },  // 南側壁（右端を空けて通路に）
+  { x: 260, y: 380, width: 20, height: 140 }, // 東側壁（下端を空けて通路に）
+
+  // --- 【追加部屋 2】 中東：医師当直・診察室 (STAFF ROOM) ---
+  { x: 990, y: 450, width: 195, height: 20 }, // 北側壁（左端を空けて通路に）
+  { x: 990, y: 650, width: 195, height: 20 }, // 南側壁（左端を空けて通路に）
+  { x: 940, y: 450, width: 20, height: 160 }, // 西側壁（下端を空けて通路に）
+
+  // --- 【追加部屋 3】 中北：面会室 (VISITOR ROOM) ---
+  { x: 450, y: 180, width: 110, height: 20 }, // 南側壁（中央を空けて入り口に）
+  { x: 640, y: 180, width: 110, height: 20 }, // 南側壁（中央を空けて入り口に）
+  { x: 450, y: 15, width: 20, height: 125 },  // 西側壁
+  { x: 750, y: 15, width: 20, height: 125 },  // 東側壁
+
+  // --- 【追加部屋 4】 中南：ボイラー室 (BOILER ROOM) ---
+  { x: 480, y: 980, width: 85, height: 20 },  // 北側壁（中央を空けて入り口に）
+  { x: 635, y: 980, width: 85, height: 20 },  // 北側壁（中央を空けて入り口に）
+  { x: 480, y: 1030, width: 20, height: 155 }, // 西側壁
+  { x: 720, y: 1030, width: 20, height: 155 }, // 東側壁
 
   // 7. マップ中央の迷路化用のランダムなブロックウォール
   { x: 300, y: 460, width: 80, height: 80 },  // 中間左ブロック
@@ -71,7 +93,14 @@ const INITIAL_HIDE_SPOTS: HideSpot[] = [
   { id: 'spot_bed_1', type: 'BED', x: 40, y: 40, width: 50, height: 30 },     // セクター1：つぼみの初期室
   { id: 'spot_bed_2', type: 'BED', x: 1080, y: 40, width: 50, height: 30 },   // セクター2：手術病室奥
   { id: 'spot_closet_1', type: 'CLOSET', x: 220, y: 920, width: 35, height: 38 }, // セクター3：南西大部屋
-  { id: 'spot_closet_2', type: 'CLOSET', x: 820, y: 1080, width: 35, height: 38 } // セクター4：南東倉庫
+  { id: 'spot_closet_2', type: 'CLOSET', x: 820, y: 1080, width: 35, height: 38 }, // セクター4：南東倉庫
+  
+  // 新規部屋用の隠れスポットを追加（ベッド・クローゼットを増やしました）
+  { id: 'spot_bed_counsel', type: 'BED', x: 50, y: 430, width: 50, height: 30 },     // 追加部屋1：カウンセリング室
+  { id: 'spot_closet_staff', type: 'CLOSET', x: 1100, y: 520, width: 35, height: 38 }, // 追加部屋2：医師当直室
+  { id: 'spot_bed_visitor', type: 'BED', x: 500, y: 60, width: 50, height: 30 },      // 追加部屋3：面会室
+  { id: 'spot_closet_visitor', type: 'CLOSET', x: 680, y: 60, width: 35, height: 38 }, // 追加部屋3：面会室
+  { id: 'spot_closet_boiler', type: 'CLOSET', x: 580, y: 1100, width: 35, height: 38 } // 追加部屋4：ボイラー室
 ];
 
 // アイテムの配置
@@ -88,16 +117,22 @@ const INITIAL_ITEMS: Item[] = [
   { id: 'med_sm_3', type: 'SMALL_MEDICINE', x: 60, y: 650, collected: false, pulseTimer: 0 },
   { id: 'med_sm_4', type: 'SMALL_MEDICINE', x: 1120, y: 550, collected: false, pulseTimer: 0 },
   { id: 'med_sm_5', type: 'SMALL_MEDICINE', x: 650, y: 950, collected: false, pulseTimer: 0 },
+  // 新規部屋用のお薬追加
+  { id: 'med_sm_counsel', type: 'SMALL_MEDICINE', x: 180, y: 480, collected: false, pulseTimer: 0 },
+  { id: 'med_sm_visitor', type: 'SMALL_MEDICINE', x: 600, y: 100, collected: false, pulseTimer: 0 },
 
   // 3. 大きい薬 (SAN値 80回復)
   { id: 'med_lg_1', type: 'LARGE_MEDICINE', x: 950, y: 60, collected: false, pulseTimer: 0 },
   { id: 'med_lg_2', type: 'LARGE_MEDICINE', x: 50, y: 920, collected: false, pulseTimer: 0 },
-  { id: 'med_lg_3', type: 'LARGE_MEDICINE', x: 1040, y: 900, collected: false, pulseTimer: 0 }
+  { id: 'med_lg_3', type: 'LARGE_MEDICINE', x: 1040, y: 900, collected: false, pulseTimer: 0 },
+  // 新規部屋用の大きいお薬
+  { id: 'med_lg_staff', type: 'LARGE_MEDICINE', x: 1050, y: 590, collected: false, pulseTimer: 0 }
 ];
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('TITLE');
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [activePauseTab, setActivePauseTab] = useState<'MAIN' | 'BAG' | 'MAP'>('MAIN');
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
   // 復活・目覚め時の一時的なメッセージエフェクト
@@ -187,17 +222,28 @@ export default function App() {
     audioManager.startHeartbeat();
   };
 
-  // ポーズの切り替え (Esc やボタンクリック)
-  const handlePauseToggle = () => {
+  // ポーズの切り替え (Esc やボタンクリック、Mキー)
+  const handlePauseToggle = (initialTab: 'MAIN' | 'BAG' | 'MAP' = 'MAIN') => {
+    const tab = (typeof initialTab === 'string') ? initialTab : 'MAIN';
     audioManager.playFlashlightClick();
     setIsPaused(prev => {
-      const next = !prev;
-      if (next) {
-        audioManager.stopAll();
-      } else {
+      if (prev) {
+        if (tab === 'MAP') {
+          if (activePauseTab === 'MAP') {
+            audioManager.startHeartbeat();
+            return false;
+          } else {
+            setActivePauseTab('MAP');
+            return true;
+          }
+        }
         audioManager.startHeartbeat();
+        return false;
+      } else {
+        audioManager.stopAll();
+        setActivePauseTab(tab);
+        return true;
       }
-      return next;
     });
   };
 
@@ -358,6 +404,9 @@ export default function App() {
               onUseMedicine={handleUseMedicine}
               onResume={handlePauseToggle}
               onQuit={handleQuitGame}
+              initialTab={activePauseTab}
+              playerX={playerState.x}
+              playerY={playerState.y}
             />
           )}
         </div>

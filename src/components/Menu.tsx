@@ -209,7 +209,7 @@ export default function Menu({ onStart }: MenuProps) {
           >
             <div className="border-b border-stone-800 pb-3" id="rule_title_area">
               <h2 className="text-2xl font-bold font-sans text-rose-400 flex items-center gap-2">
-                🛸 るーる
+                るーる
               </h2>
             </div>
 
@@ -233,7 +233,7 @@ export default function Menu({ onStart }: MenuProps) {
               </div>
 
               <div>
-                <p className="font-semibold text-rose-300 mb-1">👁️ 大切な2つのジレンマ</p>
+                <p className="font-semibold text-rose-300 mb-1">👁️ 大切な2つ</p>
                 <ol className="list-decimal list-inside space-y-2 text-xs text-stone-400 pl-1">
                   <li>
                     <strong className="text-stone-300">走るか、歩くか :</strong> 走るとスタミナを消費し、大きな足音を立てます。視界は少し広がりますが、

@@ -209,7 +209,7 @@ export default function Menu({ onStart }: MenuProps) {
           >
             <div className="border-b border-stone-800 pb-3" id="rule_title_area">
               <h2 className="text-2xl font-bold font-sans text-rose-400 flex items-center gap-2">
-                🛸 あくむのるーる
+                🛸 るーる
               </h2>
             </div>
 

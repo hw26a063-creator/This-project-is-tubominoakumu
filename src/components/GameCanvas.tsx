@@ -9,6 +9,10 @@ import { GameMap, Player, Monster, Item, HideSpot, Obstacle, GameState } from '.
 import { audioManager } from '../utils/audio';
 import tubomiImage from '../assets/images/tubomi2.png';
 
+// 読み込み済み透過画像を再利用するためのグローバルキャッシュ
+let cachedTubomiCanvas: HTMLCanvasElement | null = null;
+let isTubomiLoadFailedGlobal = false;
+
 interface GameCanvasProps {
   isPaused: boolean;
   onPauseToggle: () => void;
@@ -34,7 +38,8 @@ export default function GameCanvas({
   
   // つぼみちゃんのスプライト画像をロード（tubomi2.pngを最優先、なければtubomi1.pngにフォールバック、白背景は自動的に透過カット処理）
   const tubomiImageRef = useRef<HTMLImageElement | HTMLCanvasElement | null>(null);
-  const [tubomiLoaded, setTubomiLoaded] = useState<boolean>(false);
+  const [tubomiLoaded, setTubomiLoaded] = useState<boolean>(cachedTubomiCanvas !== null);
+  const [tubomiLoadError, setTubomiLoadError] = useState<boolean>(isTubomiLoadFailedGlobal);
 
   // 外周から連結している白背景をBFS（幅優先探索）で検出し、さらに境界部分にアンチエイリアスのエッジスムージング（半透明フェザー処理）を適用して、白いチラつきを完全に除去するプロフェッショナル背景透過システム
   const removeWhiteBackground = (img: HTMLImageElement): HTMLCanvasElement => {
@@ -230,6 +235,16 @@ export default function GameCanvas({
   };
 
   useEffect(() => {
+    if (cachedTubomiCanvas) {
+      tubomiImageRef.current = cachedTubomiCanvas;
+      setTubomiLoaded(true);
+      return;
+    }
+    if (isTubomiLoadFailedGlobal) {
+      setTubomiLoadError(true);
+      return;
+    }
+
     const img2 = new Image();
     img2.crossOrigin = 'anonymous'; // CORSの制約を回避するため追加
     
@@ -237,12 +252,15 @@ export default function GameCanvas({
     img2.onload = () => {
       console.log("Successfully loaded tubomi2.png through import. Stripping white background...");
       const processed = removeWhiteBackground(img2);
+      cachedTubomiCanvas = processed; // グローバルキャッシュに保存
       tubomiImageRef.current = processed;
       setTubomiLoaded(true);
     };
     
     img2.onerror = (e) => {
       console.warn("Failed to load imported tubomi2.png. Falling back to vector graphics.", e);
+      isTubomiLoadFailedGlobal = true;
+      setTubomiLoadError(true);
     };
 
     // ロード開始
@@ -1506,7 +1524,7 @@ export default function GameCanvas({
           ctx.fill();
           ctx.restore();
         }
-      } else {
+      } else if (tubomiLoadError) {
         if (dir === 'DOWN') {
           // ==================== 【正面・下向き】 ====================
           // --- 1. 後ろ側の足（奥のブーツ - 左足） ---

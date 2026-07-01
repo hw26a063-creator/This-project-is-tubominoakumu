@@ -329,12 +329,16 @@ export default function GameCanvas({
   const isSpawnReset = playerState.x === 65 && playerState.y === 95;
   const isExternalWarp = isPaused || isLargeWarp || isSpawnReset;
 
+  const keysMatch = playerState.keysCollected.length === playerStateRef.current.keysCollected.length &&
+    playerState.keysCollected.every((val, idx) => val === playerStateRef.current.keysCollected[idx]);
+
   const otherStatesMatch = 
     playerState.isHiding === playerStateRef.current.isHiding &&
     playerState.flashlightOn === playerStateRef.current.flashlightOn &&
     playerState.smallMedsCount === playerStateRef.current.smallMedsCount &&
     playerState.largeMedsCount === playerStateRef.current.largeMedsCount &&
-    playerState.san === playerStateRef.current.san;
+    playerState.san === playerStateRef.current.san &&
+    keysMatch;
 
   if (isExternalWarp || !otherStatesMatch) {
     playerStateRef.current = {
@@ -1060,6 +1064,10 @@ export default function GameCanvas({
 
     if (JSON.stringify(updatedItems) !== JSON.stringify(map.items)) {
       setMap(prev => ({ ...prev, items: updatedItems }));
+      setPlayerState({
+        ...player
+      });
+      hudSyncCounter.current = 0;
     }
 
     // 6. 脱出条件（4つのピースをすべて持ち中央扉 (600,600) に入る）

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type GameState = 'TITLE' | 'RULE' | 'INTRO' | 'PLAYING' | 'GAMEOVER' | 'CLEAR';
+export type GameState = 'TITLE' | 'RULE' | 'INTRO' | 'PLAYING' | 'GAMEOVER' | 'CLEAR' | 'WHITE_ROOM';
 
 export type MonsterType = 'HEARING' | 'LIGHT_SENSITIVE';
 export type MonsterState = 'PATROL' | 'CHASE' | 'SEARCH';

@@ -9,6 +9,7 @@ import Menu from './components/Menu';
 import Intro from './components/Intro';
 import PauseMenu from './components/PauseMenu';
 import GameCanvas from './components/GameCanvas';
+import WhiteRoom from './components/WhiteRoom';
 import { audioManager } from './utils/audio';
 import { RotateCcw } from 'lucide-react';
 
@@ -344,7 +345,7 @@ export default function App() {
 
   // ゲームクリア
   const handleGameClear = () => {
-    setGameState('CLEAR');
+    setGameState('WHITE_ROOM');
     audioManager.stopAll();
   };
 
@@ -502,6 +503,11 @@ export default function App() {
             タイトルに戻る
           </button>
         </div>
+      )}
+
+      {/* 6. 白い病院の診察室（現実世界の違和感） */}
+      {gameState === 'WHITE_ROOM' && (
+        <WhiteRoom onQuit={handleQuitGame} />
       )}
     </main>
   );

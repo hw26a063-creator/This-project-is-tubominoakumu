@@ -10,6 +10,7 @@ import Intro from './components/Intro';
 import PauseMenu from './components/PauseMenu';
 import GameCanvas from './components/GameCanvas';
 import WhiteRoom from './components/WhiteRoom';
+import EscapeTalk from './components/EscapeTalk';
 import { audioManager } from './utils/audio';
 import { RotateCcw } from 'lucide-react';
 
@@ -127,7 +128,13 @@ const INITIAL_ITEMS: Item[] = [
   { id: 'med_lg_2', type: 'LARGE_MEDICINE', x: 50, y: 920, collected: false, pulseTimer: 0 },
   { id: 'med_lg_3', type: 'LARGE_MEDICINE', x: 1040, y: 900, collected: false, pulseTimer: 0 },
   // 新規部屋用の大きいお薬
-  { id: 'med_lg_staff', type: 'LARGE_MEDICINE', x: 1050, y: 590, collected: false, pulseTimer: 0 }
+  { id: 'med_lg_staff', type: 'LARGE_MEDICINE', x: 1050, y: 590, collected: false, pulseTimer: 0 },
+
+  // 4. メモ用紙 4枚 (ゲーム内設定: 📝)
+  { id: 'note_0', type: 'NOTE', x: 100, y: 480, collected: false, pulseTimer: 0 },    // メモ1 カウンセリング室
+  { id: 'note_1', type: 'NOTE', x: 1080, y: 550, collected: false, pulseTimer: 0 },  // メモ2 医師当直室
+  { id: 'note_2', type: 'NOTE', x: 600, y: 80, collected: false, pulseTimer: 0 },    // メモ3 面会室
+  { id: 'note_3', type: 'NOTE', x: 600, y: 1120, collected: false, pulseTimer: 0 }   // メモ4 ボイラー室
 ];
 
 export default function App() {
@@ -158,13 +165,15 @@ export default function App() {
     keysCollected: [false, false, false, false],
     smallMedsCount: 0,
     largeMedsCount: 0,
+    notesCollected: [false, false, false, false],
 
     // セーブ用の領域
     saveX: initialSpawnX,
     saveY: initialSpawnY,
     saveKeysCollected: [false, false, false, false],
     saveSmallMedsCount: 0,
-    saveLargeMedsCount: 0
+    saveLargeMedsCount: 0,
+    saveNotesCollected: [false, false, false, false]
   });
 
   const [map, setMap] = useState<GameMap>({
@@ -198,12 +207,14 @@ export default function App() {
       keysCollected: [false, false, false, false],
       smallMedsCount: 1, // 最初からカバンに1つ持たせておく（優しい設計）
       largeMedsCount: 0,
+      notesCollected: [false, false, false, false],
 
       saveX: initialSpawnX,
       saveY: initialSpawnY,
       saveKeysCollected: [false, false, false, false],
       saveSmallMedsCount: 1,
-      saveLargeMedsCount: 0
+      saveLargeMedsCount: 0,
+      saveNotesCollected: [false, false, false, false]
     });
 
     // マップアイテムのリセット
@@ -303,12 +314,14 @@ export default function App() {
       flashlightOn: true,
       keysCollected: [...prev.saveKeysCollected],
       smallMedsCount: prev.saveSmallMedsCount,
-      largeMedsCount: prev.saveLargeMedsCount
+      largeMedsCount: prev.saveLargeMedsCount,
+      notesCollected: prev.saveNotesCollected ? [...prev.saveNotesCollected] : [false, false, false, false]
     }));
 
     // 回収済みアイテムの整合性修正（回収した鍵や回復薬はセーブ状態を維持、セーブされていないゴミアイテムはもとに戻す）
-    // セーブされた鍵
+    // セーブされた鍵・メモ
     const savedKeys = playerState.saveKeysCollected;
+    const savedNotes = playerState.saveNotesCollected || [false, false, false, false];
     
     setMap(prev => {
       const updatedItems = prev.items.map(item => {
@@ -318,6 +331,13 @@ export default function App() {
           return {
             ...item,
             collected: idx >= 0 && idx < 4 ? savedKeys[idx] : false
+          };
+        } else if (item.type === 'NOTE') {
+          const idx = parseInt(item.id.replace('note_', ''), 10);
+          // もしセーブされたメモリストに入っていれば collected = true、そうでなければ false
+          return {
+            ...item,
+            collected: idx >= 0 && idx < 4 ? savedNotes[idx] : false
           };
         } else {
           // 回復薬など：セーブされていない薬は再配置される
@@ -345,7 +365,7 @@ export default function App() {
 
   // ゲームクリア
   const handleGameClear = () => {
-    setGameState('WHITE_ROOM');
+    setGameState('ESCAPE_TALK');
     audioManager.stopAll();
   };
 
@@ -402,6 +422,7 @@ export default function App() {
               largeMedsCount={playerState.largeMedsCount}
               currentSan={playerState.san}
               keysCollected={playerState.keysCollected}
+              notesCollected={playerState.notesCollected || [false, false, false, false]}
               onUseMedicine={handleUseMedicine}
               onResume={handlePauseToggle}
               onQuit={handleQuitGame}
@@ -503,6 +524,11 @@ export default function App() {
             タイトルに戻る
           </button>
         </div>
+      )}
+
+      {/* 5.5 脱出直後の語りかけ (知っている気がする声) */}
+      {gameState === 'ESCAPE_TALK' && (
+        <EscapeTalk onComplete={() => setGameState('WHITE_ROOM')} />
       )}
 
       {/* 6. 白い病院の診察室（現実世界の違和感） */}

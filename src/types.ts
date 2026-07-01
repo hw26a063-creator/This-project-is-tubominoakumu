@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type GameState = 'TITLE' | 'RULE' | 'INTRO' | 'PLAYING' | 'GAMEOVER' | 'CLEAR' | 'WHITE_ROOM';
+export type GameState = 'TITLE' | 'RULE' | 'INTRO' | 'PLAYING' | 'GAMEOVER' | 'CLEAR' | 'WHITE_ROOM' | 'ESCAPE_TALK';
 
 export type MonsterType = 'HEARING' | 'LIGHT_SENSITIVE';
 export type MonsterState = 'PATROL' | 'CHASE' | 'SEARCH';
@@ -25,7 +25,7 @@ export interface Monster {
   lastKnownPlayerY?: number;
 }
 
-export type ItemType = 'SMALL_MEDICINE' | 'LARGE_MEDICINE' | 'KEY_PIECE';
+export type ItemType = 'SMALL_MEDICINE' | 'LARGE_MEDICINE' | 'KEY_PIECE' | 'NOTE';
 
 export interface Item {
   id: string;
@@ -67,6 +67,7 @@ export interface Player {
   keysCollected: boolean[]; // size 4, true if key piece 0,1,2,3 is collected
   smallMedsCount: number;
   largeMedsCount: number;
+  notesCollected: boolean[]; // size 4, true if note 0,1,2,3 is collected
   
   // セーブ用（捕まった時のリスタート位置）
   saveX: number;
@@ -74,6 +75,7 @@ export interface Player {
   saveKeysCollected: boolean[];
   saveSmallMedsCount: number;
   saveLargeMedsCount: number;
+  saveNotesCollected: boolean[];
 }
 
 export interface GameMap {

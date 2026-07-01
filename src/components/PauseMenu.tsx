@@ -12,6 +12,7 @@ interface PauseMenuProps {
   largeMedsCount: number;
   currentSan: number;
   keysCollected: boolean[]; // size 4
+  notesCollected: boolean[]; // size 4
   onUseMedicine: (type: 'SMALL' | 'LARGE') => void;
   onResume: () => void;
   onQuit: () => void;
@@ -25,6 +26,7 @@ export default function PauseMenu({
   largeMedsCount,
   currentSan,
   keysCollected,
+  notesCollected,
   onUseMedicine,
   onResume,
   onQuit,
@@ -35,6 +37,7 @@ export default function PauseMenu({
   const [activeTab, setActiveTab] = useState<'MAIN' | 'BAG' | 'MAP'>(initialTab);
   const [mainSelectedIndex, setMainSelectedIndex] = useState<number>(0); // 0: かばん, 1: 地図, 2: もどる, 3: おわる
   const [bagSelectedIndex, setBagSelectedIndex] = useState<number>(0);   // 0: 小さい薬, 1: 大きい薬, 2: もどる
+  const [selectedNoteIndex, setSelectedNoteIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -401,22 +404,62 @@ export default function PauseMenu({
                 </div>
               </button>
 
-              {/* 戻るボタン */}
-              <button
-                id="bag_btn_back_main"
-                onClick={() => {
-                  audioManager.playFlashlightClick();
-                  setActiveTab('MAIN');
-                }}
-                onMouseEnter={() => setBagSelectedIndex(2)}
-                className={`flex justify-center items-center gap-1.5 py-2 mt-1 rounded-xl border text-center text-xs font-semibold cursor-pointer transition-all focus:outline-none ${
-                  bagSelectedIndex === 2
-                    ? 'bg-stone-800 border-stone-600 text-stone-100'
-                    : 'bg-stone-950/50 border-stone-900 text-stone-500'
-                }`}
-              >
-                <ArrowLeft size={14} /> MAINにもどる
-              </button>
+            {/* メモ用紙 */}
+            <div className="bg-stone-950/60 p-4 border border-stone-800/80 rounded-2xl" id="notes_container">
+              <span className="text-xs text-stone-400 font-semibold mb-2 block flex items-center gap-1">
+                📝 拾ったメモ用紙 (タップで中身を読む)
+              </span>
+              <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1 text-xs" id="notes_list">
+                {[
+                  { name: '診察記録の切れ端(1)', desc: '「……患者、つぼみ。認知機能の著しい低下。小児期における極めて稀なケース……」', loc: 'カウンセリング室' },
+                  { name: '診察記録の切れ端(2)', desc: '「……幻覚・幻聴の訴えが激化。本人はこれを『あくむ』と呼び、現実との境界が曖昧に……」', loc: '医師当直室' },
+                  { name: 'カレンダーの裏の走り書き', desc: '「『おうちにかえりたい。お父さんとお母さんはどこ？』……ノートの隅に何重にも書かれた悲痛な文字……」', loc: '面会室' },
+                  { name: '破られた日記の1ページ', desc: '「……大丈夫、大丈夫だから. . .ずっとそばにいるよ、つぼみ……。誰かの優しい筆跡……」', loc: 'ボイラー室' }
+                ].map((note, idx) => {
+                  const collected = notesCollected ? notesCollected[idx] : false;
+                  return (
+                    <div 
+                      key={idx} 
+                      onClick={() => {
+                        if (collected) {
+                          audioManager.playFlashlightClick();
+                          setSelectedNoteIndex(idx);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border transition-all ${
+                        collected 
+                          ? 'bg-emerald-950/20 border-emerald-800/60 text-emerald-100 cursor-pointer hover:bg-emerald-950/40 hover:border-emerald-500' 
+                          : 'bg-stone-900/40 border-stone-800/60 text-stone-600 select-none'
+                      }`}
+                    >
+                      <div className="flex justify-between font-bold text-[10px]">
+                        <span>{note.name}</span>
+                        <span className={collected ? 'text-emerald-400 font-sans animate-pulse' : 'text-stone-700 font-sans'}>
+                          {collected ? '【所持: タップで読む】' : `【未回収: ${note.loc}】`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 戻るボタン */}
+            <button
+              id="bag_btn_back_main"
+              onClick={() => {
+                audioManager.playFlashlightClick();
+                setActiveTab('MAIN');
+              }}
+              onMouseEnter={() => setBagSelectedIndex(2)}
+              className={`flex justify-center items-center gap-1.5 py-2 mt-1 rounded-xl border text-center text-xs font-semibold cursor-pointer transition-all focus:outline-none ${
+                bagSelectedIndex === 2
+                  ? 'bg-stone-800 border-stone-600 text-stone-100'
+                  : 'bg-stone-950/50 border-stone-900 text-stone-500'
+              }`}
+            >
+              <ArrowLeft size={14} /> MAINにもどる
+            </button>
             </div>
           </div>
         ) : (
@@ -566,6 +609,63 @@ export default function PauseMenu({
             : '[Esc / M] ゲームに戻る / [Enter] メインに戻る'}
         </div>
       </div>
+
+      {/* 選択したメモ用紙のポップアップ表示 */}
+      {selectedNoteIndex !== null && (() => {
+        const notes = [
+          { name: '診察記録の切れ端(1)', desc: '「……患者、つぼみ。認知機能の著しい低下。小児期における極めて稀なケース……」' },
+          { name: '診察記録の切れ端(2)', desc: '「……幻覚・幻聴の訴えが激化。本人はこれを『あくむ』と呼び、現実との境界が曖昧に……」' },
+          { name: 'カレンダーの裏の走り書き', desc: '「『おうちにかえりたい。お父さんとお母さんはどこ？』……ノートの隅に何重にも書かれた悲痛な文字……」' },
+          { name: '破られた日記の1ページ', desc: '「……大丈夫、大丈夫だから. . .ずっとそばにいるよ、つぼみ……。誰かの優しい筆跡……」' }
+        ];
+        const selectedNote = notes[selectedNoteIndex];
+        return (
+          <div 
+            className="absolute inset-0 bg-black/90 flex items-center justify-center p-4 z-50 animate-fade-in cursor-pointer animate-duration-300"
+            onClick={() => {
+              audioManager.playFlashlightClick();
+              setSelectedNoteIndex(null);
+            }}
+            id="bag_note_detail_overlay"
+          >
+            <div 
+              className="w-full max-w-xs bg-amber-50/95 text-stone-900 border-4 border-amber-900/35 rounded-2xl p-5 shadow-[0_0_30px_rgba(0,0,0,0.9)] relative cursor-pointer transform rotate-[-0.5deg] hover:rotate-0 transition-transform duration-300 flex flex-col justify-between min-h-[260px]"
+              onClick={(e) => e.stopPropagation()}
+              id="bag_note_detail_paper"
+            >
+              <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-b from-amber-200/40 to-transparent" />
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-dashed border-amber-900/20 pb-1.5">
+                  <span className="text-[10px] font-bold text-amber-800 tracking-wider font-mono">
+                    📝 {selectedNote.name}
+                  </span>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-200/50 text-amber-950 font-bold font-sans">
+                    カバンの中身
+                  </span>
+                </div>
+
+                <div className="py-1 text-stone-800 leading-relaxed font-sans text-xs md:text-sm whitespace-pre-wrap font-medium">
+                  {selectedNote.desc}
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <button
+                  id="close_bag_note_btn"
+                  onClick={() => {
+                    audioManager.playFlashlightClick();
+                    setSelectedNoteIndex(null);
+                  }}
+                  className="w-full py-2 bg-amber-900 hover:bg-amber-950 text-amber-50 font-bold text-[10px] rounded-lg shadow-md transition-all cursor-pointer font-sans text-center"
+                >
+                  閉じる
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

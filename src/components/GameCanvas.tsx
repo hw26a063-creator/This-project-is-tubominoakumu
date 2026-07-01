@@ -54,6 +54,13 @@ const FLOOR_DECORATIONS: FloorDecoration[] = [
   { x: 820, y: 920, type: 'BLOOD', size: 20 }
 ];
 
+export const NOTES_DATA = [
+  { name: '診察記録の切れ端(1)', desc: '「……患者、つぼみ。認知機能の著しい低下。小児期における極めて稀なケース……」', loc: 'カウンセリング室' },
+  { name: '診察記録の切れ端(2)', desc: '「……幻覚・幻聴の訴えが激化。本人はこれを『あくむ』と呼び、現実との境界が曖昧に……」', loc: '医師当直室' },
+  { name: 'カレンダーの裏の走り書き', desc: '「『おうちにかえりたい。お父さんとお母さんはどこ？』……ノートの隅に何重にも書かれた悲痛な文字……」', loc: '面会室' },
+  { name: '破られた日記の1ページ', desc: '「……大丈夫、大丈夫だから. . .ずっとそばにいるよ、つぼみ……。誰かの優しい筆跡……」', loc: 'ボイラー室' }
+];
+
 interface GameCanvasProps {
   isPaused: boolean;
   onPauseToggle: (tab?: 'MAIN' | 'BAG' | 'MAP') => void;
@@ -310,6 +317,7 @@ export default function GameCanvas({
   
   // モンスターの状態
   const [monsters, setMonsters] = useState<Monster[]>([]);
+  const [readingNoteIndex, setReadingNoteIndex] = useState<number | null>(null);
   
   // 最新の値をリアルタイムゲームループ層へ Stale させずに渡すための Ref
   const playerStateRef = useRef<Player>(playerState);
@@ -596,7 +604,7 @@ export default function GameCanvas({
 
   // モニター用：心音のテンポ制御 ＆ SAN値の自然減少等のゲームループ
   useEffect(() => {
-    if (isPaused) {
+    if (isPaused || readingNoteIndex !== null) {
       audioManager.stopAll();
       return;
     }
@@ -623,11 +631,11 @@ export default function GameCanvas({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [isPaused]);
+  }, [isPaused, readingNoteIndex]);
 
   // --- ゲーム更新ロジック ---
   const updateGame = (dt: number) => {
-    if (isPaused) return;
+    if (isPaused || readingNoteIndex !== null) return;
 
     const player = playerStateRef.current;
     const monsters = monstersRef.current;
@@ -991,6 +999,7 @@ export default function GameCanvas({
     let nextSmallMeds = player.smallMedsCount;
     let nextLargeMeds = player.largeMedsCount;
     const nextKeysCollected = [...player.keysCollected];
+    const nextNotesCollected = player.notesCollected ? [...player.notesCollected] : [false, false, false, false];
 
     // マップ上の残アイテム衝突判定
     const updatedItems = map.items.map(item => {
@@ -1015,6 +1024,14 @@ export default function GameCanvas({
             nextKeysCollected[indexIdx] = true;
             shouldTriggerSave = true; // 鍵取得時にセーブ
           }
+        } else if (item.type === 'NOTE') {
+          // メモ用紙の回収 (ID末尾からインデックス 0〜3)
+          const indexIdx = parseInt(item.id.replace('note_', ''), 10);
+          if (!isNaN(indexIdx) && indexIdx >= 0 && indexIdx < 4) {
+            nextNotesCollected[indexIdx] = true;
+            shouldTriggerSave = true; // メモ取得時にもセーブ
+            setReadingNoteIndex(indexIdx); // 拾ったその場で読む
+          }
         }
 
         // セーブ処理
@@ -1023,11 +1040,12 @@ export default function GameCanvas({
           saveY: player.saveY,
           saveKeys: player.saveKeysCollected,
           saveSm: player.saveSmallMedsCount,
-          saveLg: player.saveLargeMedsCount
+          saveLg: player.saveLargeMedsCount,
+          saveNotes: player.saveNotesCollected ? [...player.saveNotesCollected] : [false, false, false, false]
         };
 
         if (shouldTriggerSave) {
-          // 鍵を拾った部屋を新しい復活セーブポイントとする
+          // 鍵やメモを拾った部屋を新しい復活セーブポイントとする
           // 最も近いベッドの位置をセーブ地点に指定（自動ベッドセーブ）
           let closestBed = map.hideSpots[0]; // 初期値
           let minBedD = 99999;
@@ -1044,17 +1062,20 @@ export default function GameCanvas({
           saveCoords.saveKeys = [...nextKeysCollected];
           saveCoords.saveSm = nextSmallMeds;
           saveCoords.saveLg = nextLargeMeds;
+          saveCoords.saveNotes = [...nextNotesCollected];
         }
 
         player.smallMedsCount = nextSmallMeds;
         player.largeMedsCount = nextLargeMeds;
         player.keysCollected = nextKeysCollected;
+        player.notesCollected = nextNotesCollected;
         if (shouldTriggerSave) {
           player.saveX = saveCoords.saveX;
           player.saveY = saveCoords.saveY;
           player.saveKeysCollected = saveCoords.saveKeys;
           player.saveSmallMedsCount = saveCoords.saveSm;
           player.saveLargeMedsCount = saveCoords.saveLg;
+          player.saveNotesCollected = saveCoords.saveNotes;
         }
 
         return { ...item, collected: true };
@@ -1462,6 +1483,15 @@ export default function GameCanvas({
         ctx.fillStyle = '#fff';
         ctx.font = '10px sans-serif';
         ctx.fillText("🗝️", item.x - 5, item.y + 4);
+      } else if (item.type === 'NOTE') {
+        ctx.fillStyle = `rgba(16, 185, 129, ${alpha})`; // エメラルドグリーン
+        ctx.beginPath();
+        ctx.arc(item.x, item.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        // メモ用紙のアイコン(📝)
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px sans-serif';
+        ctx.fillText("📝", item.x - 5, item.y + 4);
       }
     });
 
@@ -2712,6 +2742,59 @@ export default function GameCanvas({
       >
         <span>🎒 カバンをひらく (Esc)</span>
       </button>
+
+      {/* メモ用紙表示オーバーレイ */}
+      {readingNoteIndex !== null && (
+        <div 
+          className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-40 animate-fade-in"
+          onClick={() => {
+            audioManager.playFlashlightClick();
+            setReadingNoteIndex(null);
+          }}
+          id="reading_note_overlay"
+        >
+          <div 
+            className="w-full max-w-sm bg-amber-50/95 text-stone-900 border-4 border-amber-900/30 rounded-2xl p-6 shadow-[0_0_40px_rgba(0,0,0,0.8)] relative cursor-pointer transform rotate-[-1deg] hover:rotate-0 transition-transform duration-300 flex flex-col justify-between min-h-[300px]"
+            onClick={(e) => e.stopPropagation()}
+            id="reading_note_paper"
+          >
+            {/* メモの古い汚れエフェクトや破れたフチ */}
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-b from-amber-200/40 to-transparent" />
+            
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-dashed border-amber-900/20 pb-2">
+                <span className="text-xs font-bold text-amber-800 tracking-widest font-mono flex items-center gap-1">
+                  📝 {NOTES_DATA[readingNoteIndex].name}
+                </span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-200/50 text-amber-950 font-bold font-sans">
+                  手に入れたメモ
+                </span>
+              </div>
+
+              <div className="py-2 text-stone-800 leading-relaxed font-sans text-sm md:text-base whitespace-pre-wrap font-medium">
+                {NOTES_DATA[readingNoteIndex].desc}
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <p className="text-[10px] text-stone-500 font-bold text-center italic">
+                (どこかで見覚えのあるような、冷たいカルテや温かい筆跡の破片……)
+              </p>
+              
+              <button
+                id="close_reading_note_btn"
+                onClick={() => {
+                  audioManager.playFlashlightClick();
+                  setReadingNoteIndex(null);
+                }}
+                className="w-full py-2.5 bg-amber-900 hover:bg-amber-950 text-amber-50 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer font-sans text-center border border-amber-950"
+              >
+                メモをしまって戻る
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

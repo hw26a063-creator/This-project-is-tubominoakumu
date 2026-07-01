@@ -554,6 +554,43 @@ export default function GameCanvas({
         return;
       }
 
+      // ===== 【開発者向けデバッグ機能】Zキー処理の復活 =====
+      if (key === 'z') {
+        e.preventDefault();
+        if (!isPaused) {
+          // 1) 鍵取得のJingle音を鳴らして成功をお知らせ
+          audioManager.playClearJingle();
+
+          // 2) playerStateRef（ゲームループ用）の値を更新
+          playerStateRef.current.keysCollected = [true, true, true, true];
+          playerStateRef.current.saveKeysCollected = [true, true, true, true];
+
+          // 3) Reactのプレイヤー状態を更新
+          setPlayerState(prev => ({
+            ...prev,
+            keysCollected: [true, true, true, true],
+            saveKeysCollected: [true, true, true, true]
+          }));
+
+          // 4) マップ上の鍵アイテムの表示を非表示（回収済み）に一括同期
+          setMap(prev => ({
+            ...prev,
+            items: prev.items.map(item => {
+              if (item.type === 'KEY_PIECE') {
+                return { ...item, collected: true };
+              }
+              return item;
+            })
+          }));
+
+          console.log("[DEBUG] 開発者デバッグキー(Z)が押されました。すべての鍵(4/4)を付与しました。");
+        }
+        return;
+      }
+      // =======================================================
+
+
+
       keysPressed.current[key] = true;
     };
 

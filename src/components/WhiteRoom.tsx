@@ -415,7 +415,7 @@ export default function WhiteRoom({ onQuit }: WhiteRoomProps) {
         <div className="w-full flex justify-between items-center border-b border-slate-100 pb-2" id="white_room_header">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-emerald-400" />
-            <span className="font-bold text-slate-700 text-sm tracking-wider font-sans">現実の病棟 // 医師の執務室</span>
+            <span className="font-bold text-slate-700 text-sm tracking-wider font-sans"></span>
           </div>
           <button 
             id="white_room_btn_title"

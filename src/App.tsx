@@ -444,7 +444,7 @@ export default function App() {
             <h1 className="text-red-600 text-6xl md:text-7xl font-extrabold font-sans tracking-wide animate-pulse">
               ショック死
             </h1>
-            <p className="text-stone-400 text-xs font-mono py-1.5 uppercase tracking-widest">[ SANITY DEPLETED // SHOCKED ]</p>
+            <p className="text-stone-400 text-xs font-mono py-1.5 uppercase tracking-widest"></p>
           </div>
 
           <div className="max-w-md bg-stone-900 border border-stone-800/80 p-6 rounded-2xl space-y-4 shadow-2xl text-stone-300 text-sm leading-relaxed" id="go_quote_box">
@@ -453,9 +453,7 @@ export default function App() {
               耳元での不気味なささやき声が止まらない……。
               わたしの頭が狂っておかしくなっちゃう……！」
             </p>
-            <div className="text-xs text-stone-500 font-mono mt-1 pt-1 border-t border-stone-850">
-              ※つぼみちゃんはあくむの中で意識を失い、隔離部屋のベッドで目覚める記憶が残っています。
-            </div>
+            <div className="text-xs text-stone-500 font-mono mt-1 pt-1 border-t border-stone-850"></div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4" id="go_actions">

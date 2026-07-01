@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(({ mode }) => {
   return {
-    base: mode === 'production' ? '/This-project-is-tubominoakumu/' : './',
+    base: process.env.GITHUB_ACTIONS ? '/This-project-is-tubominoakumu/' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

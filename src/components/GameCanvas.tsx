@@ -55,10 +55,97 @@ const FLOOR_DECORATIONS: FloorDecoration[] = [
 ];
 
 export const NOTES_DATA = [
-  { name: '診察記録の切れ端(1)', desc: '「……患者、つぼみ。認知機能の著しい低下。小児期における極めて稀なケース……」', loc: 'カウンセリング室' },
-  { name: '診察記録の切れ端(2)', desc: '「……幻覚・幻聴の訴えが激化。本人はこれを『あくむ』と呼び、現実との境界が曖昧に……」', loc: '医師当直室' },
-  { name: 'カレンダーの裏の走り書き', desc: '「『おうちにかえりたい。お父さんとお母さんはどこ？』……ノートの隅に何重にも書かれた悲痛な文字……」', loc: '面会室' },
-  { name: '破られた日記の1ページ', desc: '「……大丈夫、大丈夫だから. . .ずっとそばにいるよ、つぼみ……。誰かの優しい筆跡……」', loc: 'ボイラー室' }
+  { name: '診察記録の切れ端(1)', desc: '「……102号室の患者\n◼️状が◼️◼️◼️◼️◼️で◼️◼️◼️◼️◼️◼️◼️◼️◼️である◼️◼️観察が◼️要\n◼️◼️(読めないや)……」', loc: 'カウンセリング室' },
+  { name: '診察記録の切れ端(2)', desc: '「……◼️◼️・◼️◼️◼️◼️◼️◼️◼️◼️化。◼️人はこれを『◼️◼️◼️◼️◼️◼️』と◼️◼️、◼️◼️◼️◼️◼️◼️に(読めないや)……」', loc: '医師当直室' },
+  { name: 'カレンダーの切れ端', desc: '「21日に赤い二重丸とケーキのイラストが描かれている」', loc: '面会室' },
+  { name: '破られた日記の1ページ', desc: '「……大丈夫、大丈夫だから. . .ずっとそばにいるよ、つぼみ……。」', loc: 'ボイラー室' }
+];
+
+export const INITIAL_MONSTERS_TEMPLATE: Monster[] = [
+  // 1. 盲目の聴覚モンスターA (北東エリア巡回)
+  {
+    id: 'monster_hearing_1',
+    type: 'HEARING',
+    x: 950,
+    y: 250,
+    speed: 1.2,
+    angle: 0,
+    state: 'PATROL',
+    targetX: 950,
+    targetY: 250,
+    patrolPath: [
+      { x: 950, y: 150 },
+      { x: 1100, y: 150 },
+      { x: 1100, y: 400 },
+      { x: 800, y: 400 },
+      { x: 800, y: 250 },
+    ],
+    patrolIndex: 0,
+    searchTimer: 0
+  },
+  // 2. 盲目の聴覚モンスターB (南西エリア巡回)
+  {
+    id: 'monster_hearing_2',
+    type: 'HEARING',
+    x: 250,
+    y: 950,
+    speed: 1.2,
+    angle: Math.PI,
+    state: 'PATROL',
+    targetX: 250,
+    targetY: 950,
+    patrolPath: [
+      { x: 250, y: 950 },
+      { x: 150, y: 950 },
+      { x: 150, y: 750 },
+      { x: 450, y: 750 },
+      { x: 450, y: 950 },
+    ],
+    patrolIndex: 0,
+    searchTimer: 0
+  },
+  // 3. 光を嫌う幽霊A (南東エリア巡回)
+  {
+    id: 'monster_light_1',
+    type: 'LIGHT_SENSITIVE',
+    x: 950,
+    y: 950,
+    speed: 0.9,
+    angle: Math.PI / 2,
+    state: 'PATROL',
+    targetX: 950,
+    targetY: 950,
+    patrolPath: [
+      { x: 950, y: 950 },
+      { x: 950, y: 700 },
+      { x: 1100, y: 700 },
+      { x: 1100, y: 1050 },
+      { x: 800, y: 1050 },
+    ],
+    patrolIndex: 0,
+    searchTimer: 0
+  },
+  // 4. 光を嫌う幽霊B (廊下中央など広く浮遊)
+  {
+    id: 'monster_light_2',
+    type: 'LIGHT_SENSITIVE',
+    x: 600,
+    y: 350,
+    speed: 0.8,
+    angle: 0,
+    state: 'PATROL',
+    targetX: 600,
+    targetY: 350,
+    patrolPath: [
+      { x: 600, y: 350 },
+      { x: 300, y: 350 },
+      { x: 300, y: 200 },
+      { x: 900, y: 200 },
+      { x: 900, y: 350 },
+    ],
+    patrolIndex: 0,
+    searchTimer: 0
+  }
 ];
 
 interface GameCanvasProps {
@@ -316,12 +403,12 @@ export default function GameCanvas({
   }, []);
   
   // モンスターの状態
-  const [monsters, setMonsters] = useState<Monster[]>([]);
+  const [monsters, setMonsters] = useState<Monster[]>(() => JSON.parse(JSON.stringify(INITIAL_MONSTERS_TEMPLATE)));
   const [readingNoteIndex, setReadingNoteIndex] = useState<number | null>(null);
   
   // 最新の値をリアルタイムゲームループ層へ Stale させずに渡すための Ref
   const playerStateRef = useRef<Player>(playerState);
-  const monstersRef = useRef<Monster[]>(monsters);
+  const monstersRef = useRef<Monster[]>(JSON.parse(JSON.stringify(INITIAL_MONSTERS_TEMPLATE)));
   const mapRef = useRef<GameMap>(map);
   const isPausedRef = useRef<boolean>(isPaused);
   const hudSyncCounter = useRef<number>(0);
@@ -370,7 +457,6 @@ export default function GameCanvas({
     }
   }
 
-  monstersRef.current = monsters;
   mapRef.current = map;
   isPausedRef.current = isPaused;
   
@@ -400,92 +486,7 @@ export default function GameCanvas({
     checkMobile();
 
     // モンスターの初期化 (2種類 x 2体 = 4体配置)
-    const initialMonsters: Monster[] = [
-      // 1. 盲目の聴覚モンスターA (北東エリア巡回)
-      {
-        id: 'monster_hearing_1',
-        type: 'HEARING',
-        x: 950,
-        y: 250,
-        speed: 1.2,
-        angle: 0,
-        state: 'PATROL',
-        targetX: 950,
-        targetY: 250,
-        patrolPath: [
-          { x: 950, y: 150 },
-          { x: 1100, y: 150 },
-          { x: 1100, y: 400 },
-          { x: 800, y: 400 },
-          { x: 800, y: 250 },
-        ],
-        patrolIndex: 0,
-        searchTimer: 0
-      },
-      // 2. 盲目の聴覚モンスターB (南西エリア巡回)
-      {
-        id: 'monster_hearing_2',
-        type: 'HEARING',
-        x: 250,
-        y: 950,
-        speed: 1.2,
-        angle: Math.PI,
-        state: 'PATROL',
-        targetX: 250,
-        targetY: 950,
-        patrolPath: [
-          { x: 250, y: 950 },
-          { x: 150, y: 950 },
-          { x: 150, y: 750 },
-          { x: 450, y: 750 },
-          { x: 450, y: 950 },
-        ],
-        patrolIndex: 0,
-        searchTimer: 0
-      },
-      // 3. 光を嫌う幽霊A (南東エリア巡回)
-      {
-        id: 'monster_light_1',
-        type: 'LIGHT_SENSITIVE',
-        x: 950,
-        y: 950,
-        speed: 0.9,
-        angle: Math.PI / 2,
-        state: 'PATROL',
-        targetX: 950,
-        targetY: 950,
-        patrolPath: [
-          { x: 950, y: 950 },
-          { x: 950, y: 700 },
-          { x: 1100, y: 700 },
-          { x: 1100, y: 1050 },
-          { x: 800, y: 1050 },
-        ],
-        patrolIndex: 0,
-        searchTimer: 0
-      },
-      // 4. 光を嫌う幽霊B (廊下中央など広く浮遊)
-      {
-        id: 'monster_light_2',
-        type: 'LIGHT_SENSITIVE',
-        x: 600,
-        y: 350,
-        speed: 0.8,
-        angle: 0,
-        state: 'PATROL',
-        targetX: 600,
-        targetY: 350,
-        patrolPath: [
-          { x: 600, y: 350 },
-          { x: 300, y: 350 },
-          { x: 300, y: 200 },
-          { x: 900, y: 200 },
-          { x: 900, y: 350 },
-        ],
-        patrolIndex: 0,
-        searchTimer: 0
-      }
-    ];
+    const initialMonsters = JSON.parse(JSON.stringify(INITIAL_MONSTERS_TEMPLATE)) as Monster[];
 
     setMonsters(initialMonsters);
     monstersRef.current = initialMonsters;
@@ -714,7 +715,7 @@ export default function GameCanvas({
     const shiftPressed = keysPressed.current['shift'];
     const wantToDash = (shiftPressed || touchDashing) && isMoving && !isBreathless.current && !player.isHiding;
     
-    // パニック検知
+    // 3. パニック検知 & 心拍音
     let closestDistToMonster = 9999;
     let activeChasing = false;
 
@@ -724,7 +725,7 @@ export default function GameCanvas({
       if (m.state === 'CHASE') activeChasing = true;
     });
 
-    // 恐怖によるパニック具合。距離250px以下で徐々にパニック
+    // 恐怖によるパニック具合。距離280px以下で徐々にパニック
     const threatDist = 280;
     let computedPanic = 0;
     if (closestDistToMonster < threatDist) {
@@ -769,7 +770,7 @@ export default function GameCanvas({
       }
     }
 
-    // 3. プレイヤー位置の更新（壁との衝突判定：スライディング ＆ 押し出し）
+    // プレイヤー位置の更新（壁との衝突判定：スライディング ＆ 押し出し）
     let nextX = player.x;
     let nextY = player.y;
     let playerAngle = player.angle;
@@ -819,13 +820,11 @@ export default function GameCanvas({
       }
     }
 
-    // 4. マップ境界外へのすり抜け・めり込み防止の強制クランプ ＆ 壁中めり込み時の超強力引き戻し
+    // マップ境界外へのすり抜け・めり込み防止の強制クランプ ＆ 壁中めり込み時の超強力引き戻し
     nextX = Math.max(15, Math.min(map.width - 15, nextX));
     nextY = Math.max(15, Math.min(map.height - 15, nextY));
 
-    // [超重要] もし更新後の座標 (nextX, nextY) が「壁の内部」にめり込んでいる場合、
-    // 即座に前フレームの安全な座標、もしくはセーブ座標、スポーン座標に強制引き戻しする。
-    // これにより、壁を突き抜けて外（下や横）に出るバグは物理的に100%完全に防がれます。
+    // もし更新後の座標 (nextX, nextY) が「壁の内部」にめり込んでいる場合、即座に安全な座標に引き戻す
     if (checkCollision(nextX, nextY, 12)) {
       if (!checkCollision(player.x, player.y, 12)) {
         nextX = player.x;
@@ -879,44 +878,58 @@ export default function GameCanvas({
         onGameOver();
       }
 
-      // 隠れている時の追跡遮断
-      if (player.isHiding && mState === 'CHASE') {
+      // --- 隠れている時の逃避・離散ロジック ---
+      if (player.isHiding) {
         mState = 'SEARCH';
-        mSearchTimer = 3.0; // 3秒うろうろして見失う
-        mTargetX = player.x + (Math.random() * 80 - 40);
-        mTargetY = player.y + (Math.random() * 80 - 40);
-      }
+        mSearchTimer = 4.0; // 4秒間、逃避ターゲットをキープ
 
-      // --- 各モンスター特有の索敵ロジック ---
-      if (m.type === 'HEARING') {
-        // 盲目の聴覚モンスター：プレイヤーが走り(Dash)、かつ近接距離450px以内にいるとき、その方向を察知
-        if (wantToDash && distToPlayer < 450 && !player.isHiding) {
+        // プレイヤーからモンスターへの方向を計算し、プレイヤーから遠ざかる(逆)方向に目標を設定する
+        const angleAway = Math.atan2(mY - player.y, mX - player.x);
+        
+        // プレイヤーから350px以上離れた方向へ移動させる
+        mTargetX = player.x + Math.cos(angleAway) * 350;
+        mTargetY = player.y + Math.sin(angleAway) * 350;
+        
+        // 逃げる速度はかなりゆっくり
+        mSpeed = 0.5;
+      } else {
+        // --- 通常時（隠れていない時）：プレイヤーに一定距離まで接近したら自動的に気づいて追跡する（ゆっくり追う） ---
+        if (distToPlayer < 140) {
           mState = 'CHASE';
           mTargetX = player.x;
           mTargetY = player.y;
           mLastKnownPlayerX = player.x;
           mLastKnownPlayerY = player.y;
         }
-      } else if (m.type === 'LIGHT_SENSITIVE') {
-        // 光を嫌う幽霊：プレイヤーの懐中電灯ON、かつ幽霊がプレイヤーの懐中電灯錐体（扇形）の中にいると怒る
-        if (player.flashlightOn && !player.isHiding && distToPlayer < 240) {
-          // 懐中電灯のビーム範囲に入っているかを角度で判定
-          // プレイヤーとモンスターの角度
-          const angleToMonster = Math.atan2(mY - player.y, mX - player.x);
-          let angleDiff = Math.abs(angleToMonster - playerAngle);
-          // 角度差を補正
-          if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
 
-          // 懐中電灯の照射角度（約35度 = 0.6ラジアン)
-          if (angleDiff < 0.6) {
-            // 壁に遮られていないかもチェック
-            const hitWall = checkLineOfSightCollision(player.x, player.y, mX, mY);
-            if (!hitWall) {
-              mState = 'CHASE';
-              mTargetX = player.x;
-              mTargetY = player.y;
-              mLastKnownPlayerX = player.x;
-              mLastKnownPlayerY = player.y;
+        // --- 各モンスター特有の索敵ロジック ---
+        if (m.type === 'HEARING') {
+          // 盲目の聴覚モンスター：プレイヤーが走り(Dash)、かつ近接距離450px以内にいるとき、その方向を察知
+          if (wantToDash && distToPlayer < 450) {
+            mState = 'CHASE';
+            mTargetX = player.x;
+            mTargetY = player.y;
+            mLastKnownPlayerX = player.x;
+            mLastKnownPlayerY = player.y;
+          }
+        } else if (m.type === 'LIGHT_SENSITIVE') {
+          // 光を嫌う幽霊：プレイヤーの懐中電灯ON、かつ幽霊がプレイヤーの懐中電灯錐体（扇形）の中にいると怒る
+          if (player.flashlightOn && distToPlayer < 240) {
+            // 懐中電灯のビーム範囲に入っているかを角度で判定
+            const angleToMonster = Math.atan2(mY - player.y, mX - player.x);
+            let angleDiff = Math.abs(angleToMonster - playerAngle);
+            if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+
+            // 懐中電灯の照射角度（約35度 = 0.6ラジアン)
+            if (angleDiff < 0.6) {
+              const hitWall = checkLineOfSightCollision(player.x, player.y, mX, mY);
+              if (!hitWall) {
+                mState = 'CHASE';
+                mTargetX = player.x;
+                mTargetY = player.y;
+                mLastKnownPlayerX = player.x;
+                mLastKnownPlayerY = player.y;
+              }
             }
           }
         }
@@ -924,7 +937,8 @@ export default function GameCanvas({
 
       // --- 状態ごとの行動処理 ---
       if (mState === 'CHASE') {
-        mSpeed = m.type === 'HEARING' ? 1.9 : 1.5; // 聴覚タイプは突進が超絶速い、幽霊もそこそこ速い
+        // 追跡スピードはゆっくり（つぼみちゃんをじわじわ追い詰める速度）
+        mSpeed = m.type === 'HEARING' ? 1.05 : 0.85; 
         
         // 常に最新のプレイヤー座標に向かい続ける（見えている／聞いている間はリアルタイム追跡）
         if (!player.isHiding) {
@@ -940,7 +954,8 @@ export default function GameCanvas({
           mSearchTimer = 3.5;
         }
       } else if (mState === 'SEARCH') {
-        mSpeed = 0.7; // 捜索中はゆっくりキョロキョロ
+        // 捜索中はゆっくりキョロキョロ
+        mSpeed = 0.5; 
         mSearchTimer -= dt;
 
         // 捜索目標についたら、その付近にランダムに次の捜索先をセット
@@ -958,8 +973,8 @@ export default function GameCanvas({
           mTargetY = m.patrolPath[mPatrolIndex].y;
         }
       } else {
-        // PATROL (通常状態)
-        mSpeed = m.type === 'HEARING' ? 0.9 : 0.65; // 聞き耳は早歩き、幽霊はゆらゆら
+        // PATROL (通常巡回状態、ゆっくりうろうろ)
+        mSpeed = m.type === 'HEARING' ? 0.65 : 0.45; 
         const currentPatrolNode = m.patrolPath[mPatrolIndex];
         mTargetX = currentPatrolNode.x;
         mTargetY = currentPatrolNode.y;
@@ -2557,6 +2572,18 @@ export default function GameCanvas({
       className="relative flex flex-col justify-center items-center bg-stone-950 w-full min-h-screen overflow-hidden text-stone-200 select-none"
       id="game_viewport_root"
     >
+      {/* 画面外周のパニックビネット（お化けが近づくと画面全体が赤く強く染まる） */}
+      {panicLevel > 0 && (
+        <div 
+          id="panic_vignette_overlay"
+          className="absolute inset-0 pointer-events-none z-30 transition-opacity duration-100"
+          style={{
+            boxShadow: `inset 0 0 ${40 + (panicLevel / 100) * 120}px rgba(220, 38, 38, ${0.3 + (panicLevel / 100) * 0.6})`,
+            opacity: panicLevel / 100,
+          }}
+        />
+      )}
+
       {/* 1. キャンバス */}
       <canvas 
         id="game_canvas"
@@ -2814,10 +2841,6 @@ export default function GameCanvas({
             </div>
 
             <div className="mt-6 space-y-3">
-              <p className="text-[10px] text-stone-500 font-bold text-center italic">
-                (どこかで見覚えのあるような、冷たいカルテや温かい筆跡の破片……)
-              </p>
-              
               <button
                 id="close_reading_note_btn"
                 onClick={() => {
